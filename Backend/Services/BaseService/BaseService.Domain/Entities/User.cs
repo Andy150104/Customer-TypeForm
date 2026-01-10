@@ -5,6 +5,11 @@ public class User : BaseEntity
     public Guid? RoleId { get; set; }
     
     public string Email { get; set; } = null!;
+
+    /// <summary>
+    /// Password stored as a hash (never store plaintext).
+    /// </summary>
+    public string? Password { get; set; }
     
     public string? Name { get; set; }
     

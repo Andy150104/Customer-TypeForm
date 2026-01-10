@@ -12,6 +12,10 @@ public class FormsDbContext : AppDbContext
     {
     }
 
+    // Base entities
+    public DbSet<User> Users { get; set; } = null!;
+    public DbSet<Role> Roles { get; set; } = null!;
+
     // OpenIddict entities
     public DbSet<OpenIddictEntityFrameworkCoreApplication<Guid>> OpenIddictApplications { get; set; } = null!;
     public DbSet<OpenIddictEntityFrameworkCoreAuthorization<Guid>> OpenIddictAuthorizations { get; set; } = null!;
@@ -28,6 +32,22 @@ public class FormsDbContext : AppDbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        // IMPORTANT:
+        // Keep table names consistent with existing schema/migrations ("User", "Role").
+        // Without this, EF may infer "Users"/"Roles" from DbSet names and generate rename migrations.
+        modelBuilder.Entity<User>(entity =>
+        {
+            entity.ToTable("User");
+            entity.HasOne(u => u.Role)
+                .WithMany(r => r.Users)
+                .HasForeignKey(u => u.RoleId);
+        });
+
+        modelBuilder.Entity<Role>(entity =>
+        {
+            entity.ToTable("Role");
+        });
 
         // Configure OpenIddict entities - OpenIddict will configure these automatically
         // when UseOpenIddict<Guid>() is called in DbContextOptions configuration

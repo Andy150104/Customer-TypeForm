@@ -1,24 +1,33 @@
+using BaseService.Common.Settings;
+using ClientService.API.Extensions;
+
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
+// Load environment variables
+EnvLoader.Load();
 
 builder.Services.AddControllers();
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services
+    .AddClientServiceSwagger()
+    .AddClientServiceCors()
+    .AddClientServiceDatabase(builder.Configuration)
+    .AddClientServiceOpenIddict()
+    .AddClientServiceMediatR()
+    .AddClientServiceRepositories()
+    .AddClientServiceCommonServices()
+    .AddClientServiceApplicationServices()
+    .AddClientServiceAuthentication(builder.Configuration);
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+app
+    .UseClientServiceSwagger()
+    .UseClientServiceCors()
+    .UseHttpsRedirection()
+    .UseAuthentication()
+    .UseAuthorization();
 
-app.UseHttpsRedirection();
-
-app.UseAuthorization();
+app.UseClientServiceDatabaseMigrations();
 
 app.MapControllers();
 
