@@ -21,10 +21,7 @@ jobs:
           username: ${{ secrets.SERVER_USER }}   # root
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: 22
-
-          # ✅ QUAN TRỌNG: forward env sang VPS
           envs: DEPLOY_PATH,REPO_URL,REPO_PAT,CLIENTSERVICE_ENV
-
           script: |
             set -euo pipefail
 
@@ -36,12 +33,25 @@ jobs:
             mkdir -p "$DEPLOY_PATH"
             cd "$DEPLOY_PATH"
 
+            # --- keep https cert folder safe ---
+            mkdir -p ./.https
+
             # 1) Clone/Pull source
-            if [ ! -d ".git" ]; then
-              git clone "https://x-access-token:${REPO_PAT}@${REPO_URL#https://}" .
-            else
+            if [ -d ".git" ]; then
               git fetch --all
               git reset --hard origin/main
+            else
+              # If directory is not empty, wipe everything except .https
+              shopt -s dotglob
+              for item in * .*; do
+                case "$item" in
+                  "."|".."|".https") continue ;;
+                  *) rm -rf "$item" ;;
+                esac
+              done
+              shopt -u dotglob
+
+              git clone "https://x-access-token:${REPO_PAT}@${REPO_URL#https://}" .
             fi
 
             # 2) Verify HTTPS cert exists on VPS
