@@ -4,6 +4,7 @@
 FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS base
 WORKDIR /app
 EXPOSE 7217
+EXPOSE 7218
 
 
 # This stage is used to build the service project
