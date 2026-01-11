@@ -9,7 +9,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy via SSH (create .env on the fly, keep existing pfx)
+      - name: Deploy via SSH (create .env on the fly, keep existing pfx at root/.https)
         uses: appleboy/ssh-action@v1.0.3
         env:
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
@@ -18,7 +18,7 @@ jobs:
           CLIENTSERVICE_ENV: ${{ secrets.CLIENTSERVICE_ENV }}
         with:
           host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}   # root
+          username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: 22
           envs: DEPLOY_PATH,REPO_URL,REPO_PAT,CLIENTSERVICE_ENV
@@ -33,64 +33,68 @@ jobs:
             mkdir -p "$DEPLOY_PATH"
             cd "$DEPLOY_PATH"
 
-            # ---- Paths (compose is inside Backend) ----
             APP_DIR="Backend"
-            CERT_PATH="$APP_DIR/.https/aspnetapp.pfx"
-            CERT_TMP="/tmp/aspnetapp.pfx"
-            ENV_PATH="$APP_DIR/.env"
             COMPOSE_FILE="$APP_DIR/docker-compose.yml"
+
+            # cert bạn đang có sẵn ở root/.https
+            CERT_ROOT="./.https/aspnetapp.pfx"
+            CERT_BACKEND="$APP_DIR/.https/aspnetapp.pfx"
+            ENV_PATH="$APP_DIR/.env"
 
             # 1) Clone/Pull source
             if [ -d ".git" ]; then
               git fetch --all
               git reset --hard origin/main
             else
-              # backup cert nếu có
-              if [ -f "$CERT_PATH" ]; then
-                cp "$CERT_PATH" "$CERT_TMP"
-              fi
+              # backup cert root nếu có
+              CERT_TMP="/tmp/aspnetapp.pfx"
+              if [ -f "$CERT_ROOT" ]; then cp "$CERT_ROOT" "$CERT_TMP"; fi
 
-              # xoá sạch thư mục để clone vào .
               shopt -s dotglob nullglob
               rm -rf -- *
               shopt -u dotglob nullglob
 
               git clone "https://x-access-token:${REPO_PAT}@${REPO_URL#https://}" .
 
-              # restore cert
+              # restore cert root
               if [ -f "$CERT_TMP" ]; then
-                mkdir -p "$APP_DIR/.https"
-                mv "$CERT_TMP" "$CERT_PATH"
-                chmod 600 "$CERT_PATH" || true
+                mkdir -p ./.https
+                mv "$CERT_TMP" "$CERT_ROOT"
+                chmod 600 "$CERT_ROOT" || true
               fi
             fi
 
             # 2) Check compose exists
             if [ ! -f "$COMPOSE_FILE" ]; then
               echo "Missing compose file: $COMPOSE_FILE"
-              echo "Repo root:"
               ls -la
-              echo "Backend folder:"
               ls -la "$APP_DIR" || true
               exit 1
             fi
 
-            # 3) Verify HTTPS cert exists (in Backend/.https)
-            if [ ! -f "$CERT_PATH" ]; then
-              echo "Missing $CERT_PATH on VPS. Create it first!"
+            # 3) Verify cert exists at root/.https
+            if [ ! -f "$CERT_ROOT" ]; then
+              echo "Missing $CERT_ROOT on VPS. You created it before, put it here."
               exit 1
             fi
-            chmod 600 "$CERT_PATH" || true
+            chmod 600 "$CERT_ROOT" || true
 
-            # 4) Create .env into Backend/.env
+            # 4) Ensure Backend/.https points to root cert
+            mkdir -p "$APP_DIR/.https"
+
+            # dùng symlink (ưu tiên). nếu fail thì copy
+            ln -sf "../../.https/aspnetapp.pfx" "$CERT_BACKEND" || cp -f "$CERT_ROOT" "$CERT_BACKEND"
+            chmod 600 "$CERT_BACKEND" || true
+
+            # 5) Create .env into Backend/.env
             printf '%s' "$CLIENTSERVICE_ENV" > "$ENV_PATH"
             chmod 600 "$ENV_PATH"
 
-            # 5) Deploy (run compose from Backend)
+            # 6) Deploy inside Backend
             cd "$APP_DIR"
             docker compose -f docker-compose.yml up -d --build --remove-orphans
 
-            # 6) Remove .env after deploy (optional)
+            # 7) Remove .env after deploy (optional)
             rm -f ./.env
 
             docker image prune -f
