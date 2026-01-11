@@ -9,7 +9,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy via SSH (create .env on the fly)
+      - name: Deploy via SSH (create .env on the fly, use existing .pfx on VPS)
         uses: appleboy/ssh-action@v1.0.3
         env:
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
@@ -17,8 +17,7 @@ jobs:
           REPO_URL: ${{ secrets.REPO_URL }}
           REPO_PAT: ${{ secrets.REPO_PAT }}
 
-          CLIENTSERVICE_ENV_B64: ${{ secrets.CLIENTSERVICE_ENV_B64 }}
-          HTTPS_PFX_B64: ${{ secrets.HTTPS_PFX_B64 }}
+          CLIENTSERVICE_ENV: ${{ secrets.CLIENTSERVICE_ENV }}
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
@@ -29,7 +28,7 @@ jobs:
             mkdir -p "$DEPLOY_PATH"
             cd "$DEPLOY_PATH"
 
-            # 1) Clone/Pull source (vì compose của bạn dùng build -> cần source trên VPS)
+            # 1) Clone/Pull source (compose dùng build -> cần source trên VPS)
             if [ ! -d ".git" ]; then
               if [ -n "${REPO_URL:-}" ] && [ -n "${REPO_PAT:-}" ]; then
                 git clone "https://x-access-token:${REPO_PAT}@${REPO_URL#https://}" .
@@ -42,19 +41,25 @@ jobs:
               git reset --hard origin/main
             fi
 
-            # 2) Write HTTPS cert file (KHÔNG xóa sau deploy vì bind mount)
-            mkdir -p ./.https
-            echo "$HTTPS_PFX_B64" | base64 -d > ./.https/aspnetapp.pfx
-            chmod 600 ./.https/aspnetapp.pfx
+            # 2) Verify HTTPS cert exists on VPS (bạn đã tạo sẵn)
+            if [ ! -f "./.https/aspnetapp.pfx" ]; then
+              echo "Missing ./.https/aspnetapp.pfx on VPS. Create it first!"
+              exit 1
+            fi
+            chmod 600 ./.https/aspnetapp.pfx || true
 
-            # 3) Create .env just-in-time
-            echo "$CLIENTSERVICE_ENV_B64" | base64 -d > ./.env
+            # 3) Create .env just-in-time from secret (multiline)
+            if [ -z "${CLIENTSERVICE_ENV:-}" ]; then
+              echo "Missing CLIENTSERVICE_ENV secret."
+              exit 1
+            fi
+            printf '%s' "$CLIENTSERVICE_ENV" > ./.env
             chmod 600 ./.env
 
             # 4) Deploy
             docker compose up -d --build --remove-orphans
 
-            # 5) Remove .env right after (không nằm trên disk lâu)
+            # 5) Remove .env after deploy (optional)
             rm -f ./.env
 
             # optional cleanup
