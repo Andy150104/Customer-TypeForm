@@ -33,8 +33,12 @@ jobs:
             mkdir -p "$DEPLOY_PATH"
             cd "$DEPLOY_PATH"
 
-            CERT_PATH="./.https/aspnetapp.pfx"
+            # ---- Paths (compose is inside Backend) ----
+            APP_DIR="Backend"
+            CERT_PATH="$APP_DIR/.https/aspnetapp.pfx"
             CERT_TMP="/tmp/aspnetapp.pfx"
+            ENV_PATH="$APP_DIR/.env"
+            COMPOSE_FILE="$APP_DIR/docker-compose.yml"
 
             # 1) Clone/Pull source
             if [ -d ".git" ]; then
@@ -46,7 +50,7 @@ jobs:
                 cp "$CERT_PATH" "$CERT_TMP"
               fi
 
-              # xoá sạch thư mục (để git clone vào . không lỗi)
+              # xoá sạch thư mục để clone vào .
               shopt -s dotglob nullglob
               rm -rf -- *
               shopt -u dotglob nullglob
@@ -55,25 +59,38 @@ jobs:
 
               # restore cert
               if [ -f "$CERT_TMP" ]; then
-                mkdir -p ./.https
+                mkdir -p "$APP_DIR/.https"
                 mv "$CERT_TMP" "$CERT_PATH"
                 chmod 600 "$CERT_PATH" || true
               fi
             fi
 
-            # 2) Verify HTTPS cert exists on VPS
+            # 2) Check compose exists
+            if [ ! -f "$COMPOSE_FILE" ]; then
+              echo "Missing compose file: $COMPOSE_FILE"
+              echo "Repo root:"
+              ls -la
+              echo "Backend folder:"
+              ls -la "$APP_DIR" || true
+              exit 1
+            fi
+
+            # 3) Verify HTTPS cert exists (in Backend/.https)
             if [ ! -f "$CERT_PATH" ]; then
               echo "Missing $CERT_PATH on VPS. Create it first!"
               exit 1
             fi
+            chmod 600 "$CERT_PATH" || true
 
-            # 3) Create .env just-in-time
-            printf '%s' "$CLIENTSERVICE_ENV" > ./.env
-            chmod 600 ./.env
+            # 4) Create .env into Backend/.env
+            printf '%s' "$CLIENTSERVICE_ENV" > "$ENV_PATH"
+            chmod 600 "$ENV_PATH"
 
-            # 4) Deploy
-            docker compose up -d --build --remove-orphans
+            # 5) Deploy (run compose from Backend)
+            cd "$APP_DIR"
+            docker compose -f docker-compose.yml up -d --build --remove-orphans
 
-            # 5) Remove .env
+            # 6) Remove .env after deploy (optional)
             rm -f ./.env
+
             docker image prune -f
