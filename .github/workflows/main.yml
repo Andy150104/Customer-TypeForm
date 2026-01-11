@@ -9,21 +9,20 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy via SSH (use env-file in /root/.secrets, keep pfx at root/.https, print HTTPS URL)
+      - name: Deploy via SSH (keep Backend/.env, keep existing pfx at root/.https, verify running, print HTTPS URL)
         uses: appleboy/ssh-action@v1.0.3
         env:
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
           REPO_URL: ${{ secrets.REPO_URL }}
           REPO_PAT: ${{ secrets.REPO_PAT }}
           CLIENTSERVICE_ENV: ${{ secrets.CLIENTSERVICE_ENV }}
-          SERVER_HOST: ${{ secrets.SERVER_HOST }}          # dùng để log URL
-          PUBLIC_BASE_URL: ${{ secrets.PUBLIC_BASE_URL }}  # (optional) ví dụ https://api.edusmart.pro.vn
+          SERVER_HOST: ${{ secrets.SERVER_HOST }} # để log URL
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: 22
-          envs: DEPLOY_PATH,REPO_URL,REPO_PAT,CLIENTSERVICE_ENV,SERVER_HOST,PUBLIC_BASE_URL
+          envs: DEPLOY_PATH,REPO_URL,REPO_PAT,CLIENTSERVICE_ENV,SERVER_HOST
           script: |
             set -euo pipefail
 
@@ -33,24 +32,28 @@ jobs:
             : "${CLIENTSERVICE_ENV:?Missing CLIENTSERVICE_ENV}"
             : "${SERVER_HOST:?Missing SERVER_HOST}"
 
+            mkdir -p "$DEPLOY_PATH"
+            cd "$DEPLOY_PATH"
+
             APP_DIR="Backend"
             COMPOSE_FILE="$APP_DIR/docker-compose.yml"
 
-            CERT_ROOT=".https/aspnetapp.pfx"
+            # cert bạn có sẵn ở root/.https
+            CERT_ROOT="./.https/aspnetapp.pfx"
             CERT_BACKEND="$APP_DIR/.https/aspnetapp.pfx"
 
-            SECRETS_DIR="/root/.secrets"
-            ENV_FILE="$SECRETS_DIR/clientservice.env"
+            # env file mà compose của bạn đang trông đợi
+            ENV_PATH="$APP_DIR/.env"
 
-            mkdir -p "$DEPLOY_PATH"
-            cd "$DEPLOY_PATH"
+            # 0) đảm bảo thư mục .https luôn tồn tại
             mkdir -p ./.https
 
-            # Clone/Pull
+            # 1) Clone/Pull source
             if [ -d ".git" ]; then
               git fetch --all
               git reset --hard origin/main
             else
+              # Nếu chưa có git, dọn sạch thư mục nhưng CHỪA .https
               shopt -s dotglob nullglob
               for item in * .*; do
                 case "$item" in
@@ -63,65 +66,77 @@ jobs:
               git clone "https://x-access-token:${REPO_PAT}@${REPO_URL#https://}" .
             fi
 
-            # Validate compose
+            # 2) Check compose exists
             if [ ! -f "$COMPOSE_FILE" ]; then
               echo "Missing compose file: $COMPOSE_FILE"
-              ls -la
-              ls -la "$APP_DIR" || true
+              echo "Repo root:"; ls -la
+              echo "Backend:"; ls -la "$APP_DIR" || true
               exit 1
             fi
 
-            # Validate cert
+            # 3) Verify cert exists at root/.https
             if [ ! -f "$CERT_ROOT" ]; then
-              echo "Missing $DEPLOY_PATH/$CERT_ROOT on VPS."
+              echo "Missing $CERT_ROOT on VPS. Put cert here: $DEPLOY_PATH/.https/aspnetapp.pfx"
               exit 1
             fi
             chmod 600 "$CERT_ROOT" || true
 
-            # Link cert into Backend
+            # 4) Ensure Backend/.https points to root cert
             mkdir -p "$APP_DIR/.https"
-            ln -sf "../../$CERT_ROOT" "$CERT_BACKEND" || cp -f "$CERT_ROOT" "$CERT_BACKEND"
+            ln -sf "../../.https/aspnetapp.pfx" "$CERT_BACKEND" || cp -f "$CERT_ROOT" "$CERT_BACKEND"
             chmod 600 "$CERT_BACKEND" || true
 
-            # Write env to safe place
-            mkdir -p "$SECRETS_DIR"
-            printf '%s' "$CLIENTSERVICE_ENV" > "$ENV_FILE"
-            chmod 600 "$ENV_FILE"
+            # 5) Create Backend/.env (GIỮ LẠI để docker compose ps/up không lỗi)
+            printf '%s' "$CLIENTSERVICE_ENV" > "$ENV_PATH"
+            chmod 600 "$ENV_PATH"
 
-            # Deploy
+            # 6) Deploy inside Backend
             cd "$APP_DIR"
-            docker compose version || true
-            docker compose --env-file "$ENV_FILE" -f docker-compose.yml up -d --build --remove-orphans
+            docker compose -f docker-compose.yml up -d --build --remove-orphans
 
             echo ""
-            echo "===== DEPLOY RESULT ====="
-            docker compose -f docker-compose.yml ps || true
+            echo "===== docker compose ps (all) ====="
+            docker compose -f docker-compose.yml ps -a || true
+            echo "==================================="
             echo ""
 
-            # ---- Print HTTPS URL(s) ----
-            # Lấy port publish từ docker (ưu tiên 443, sau đó 8443, 7218, 443xx...)
-            HTTPS_PORT="$(docker ps --format '{{.Ports}}' | tr ',' '\n' | grep -Eo '0\.0\.0\.0:[0-9]+->(443|8443|7218)/tcp' | head -n1 | sed -E 's/0\.0\.0\.0:([0-9]+)->.*/\1/' || true)"
-
-            if [ -z "${HTTPS_PORT:-}" ]; then
-              # fallback: tìm port publish bất kỳ map tới 443 trong container
-              HTTPS_PORT="$(docker ps --format '{{.Ports}}' | tr ',' '\n' | grep -Eo '0\.0\.0\.0:[0-9]+->443/tcp' | head -n1 | sed -E 's/0\.0\.0\.0:([0-9]+)->.*/\1/' || true)"
+            # 7) Verify something is RUNNING (nếu không, in logs rồi fail)
+            RUNNING_COUNT="$(docker compose -f docker-compose.yml ps --status running -q | wc -l | tr -d ' ')"
+            if [ "${RUNNING_COUNT}" = "0" ]; then
+              echo "❌ No containers are running after deploy. Showing last logs..."
+              docker compose -f docker-compose.yml logs --tail=200 || true
+              echo ""
+              echo "All containers (docker ps -a):"
+              docker ps -a --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" || true
+              exit 1
             fi
 
-            if [ -n "${HTTPS_PORT:-}" ]; then
-              if [ "$HTTPS_PORT" = "443" ]; then
-                echo "✅ HTTPS URL (direct): https://${SERVER_HOST}"
+            # 8) Print HTTPS URL (auto-detect published port: 443 -> 8443 -> 7218)
+            # lấy service đầu tiên để hỏi port (thường là api)
+            SVC="$(docker compose -f docker-compose.yml config --services | head -n1 || true)"
+
+            get_port() {
+              local p="$1"
+              docker compose -f docker-compose.yml port "$SVC" "$p" 2>/dev/null | head -n1 | awk -F: '{print $NF}' || true
+            }
+
+            HTTPS_PORT="$(get_port 443)"
+            if [ -z "${HTTPS_PORT}" ]; then HTTPS_PORT="$(get_port 8443)"; fi
+            if [ -z "${HTTPS_PORT}" ]; then HTTPS_PORT="$(get_port 7218)"; fi
+
+            echo ""
+            echo "===== DEPLOY URL ====="
+            if [ -n "${HTTPS_PORT}" ]; then
+              if [ "${HTTPS_PORT}" = "443" ]; then
+                echo "✅ https://${SERVER_HOST}"
               else
-                echo "✅ HTTPS URL (direct): https://${SERVER_HOST}:${HTTPS_PORT}"
+                echo "✅ https://${SERVER_HOST}:${HTTPS_PORT}"
               fi
             else
-              echo "⚠️ Không tìm thấy port HTTPS publish (443/8443/7218)."
-              echo "   Hãy kiểm tra 'ports:' trong Backend/docker-compose.yml hoặc container đang expose port nào."
+              echo "⚠️ Không detect được HTTPS port (443/8443/7218)."
+              echo "   Hãy kiểm tra 'ports:' trong Backend/docker-compose.yml và port HTTPS bạn publish ra host."
             fi
-
-            if [ -n "${PUBLIC_BASE_URL:-}" ]; then
-              echo "✅ Public URL (domain): ${PUBLIC_BASE_URL}"
-            fi
-
-            echo "========================="
+            echo "======================"
+            echo ""
 
             docker image prune -f
