@@ -83,8 +83,9 @@ jobs:
 
             # 4) Ensure Backend/.https points to root cert
             mkdir -p "$APP_DIR/.https"
-            ln -sf "../../.https/aspnetapp.pfx" "$CERT_BACKEND" || cp -f "$CERT_ROOT" "$CERT_BACKEND"
-            chmod 600 "$CERT_BACKEND" || true
+            cp -f "$CERT_ROOT" "$CERT_BACKEND"
+            # quyền đọc: để chắc chắn container đọc được (tránh user non-root)
+            chmod 644 "$CERT_BACKEND" || true
 
             # 5) Create Backend/.env (GIỮ LẠI để docker compose ps/up không lỗi)
             printf '%s' "$CLIENTSERVICE_ENV" > "$ENV_PATH"
