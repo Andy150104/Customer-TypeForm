@@ -83,6 +83,9 @@ jobs:
 
             # 4) Ensure Backend/.https points to root cert
             mkdir -p "$APP_DIR/.https"
+            # nếu trước đó là symlink/hardlink -> remove trước
+            rm -f "$CERT_BACKEND"
+            # copy file thật
             cp -f "$CERT_ROOT" "$CERT_BACKEND"
             # quyền đọc: để chắc chắn container đọc được (tránh user non-root)
             chmod 644 "$CERT_BACKEND" || true
