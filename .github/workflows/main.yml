@@ -9,7 +9,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy via SSH (create .env on the fly, use existing .pfx on VPS)
+      - name: Deploy via SSH (create .env on the fly, keep existing pfx)
         uses: appleboy/ssh-action@v1.0.3
         env:
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
@@ -33,33 +33,39 @@ jobs:
             mkdir -p "$DEPLOY_PATH"
             cd "$DEPLOY_PATH"
 
-            # --- keep https cert folder safe ---
-            mkdir -p ./.https
+            CERT_PATH="./.https/aspnetapp.pfx"
+            CERT_TMP="/tmp/aspnetapp.pfx"
 
             # 1) Clone/Pull source
             if [ -d ".git" ]; then
               git fetch --all
               git reset --hard origin/main
             else
-              # If directory is not empty, wipe everything except .https
-              shopt -s dotglob
-              for item in * .*; do
-                case "$item" in
-                  "."|".."|".https") continue ;;
-                  *) rm -rf "$item" ;;
-                esac
-              done
-              shopt -u dotglob
+              # backup cert nếu có
+              if [ -f "$CERT_PATH" ]; then
+                cp "$CERT_PATH" "$CERT_TMP"
+              fi
+
+              # xoá sạch thư mục (để git clone vào . không lỗi)
+              shopt -s dotglob nullglob
+              rm -rf -- *
+              shopt -u dotglob nullglob
 
               git clone "https://x-access-token:${REPO_PAT}@${REPO_URL#https://}" .
+
+              # restore cert
+              if [ -f "$CERT_TMP" ]; then
+                mkdir -p ./.https
+                mv "$CERT_TMP" "$CERT_PATH"
+                chmod 600 "$CERT_PATH" || true
+              fi
             fi
 
             # 2) Verify HTTPS cert exists on VPS
-            if [ ! -f "./.https/aspnetapp.pfx" ]; then
-              echo "Missing ./.https/aspnetapp.pfx on VPS. Create it first!"
+            if [ ! -f "$CERT_PATH" ]; then
+              echo "Missing $CERT_PATH on VPS. Create it first!"
               exit 1
             fi
-            chmod 600 ./.https/aspnetapp.pfx || true
 
             # 3) Create .env just-in-time
             printf '%s' "$CLIENTSERVICE_ENV" > ./.env
@@ -70,5 +76,4 @@ jobs:
 
             # 5) Remove .env
             rm -f ./.env
-
             docker image prune -f
