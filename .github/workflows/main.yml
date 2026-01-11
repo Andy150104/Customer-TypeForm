@@ -9,19 +9,21 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy via SSH (create .env on the fly, keep existing pfx at root/.https)
+      - name: Deploy via SSH (use env-file in /root/.secrets, keep pfx at root/.https, print HTTPS URL)
         uses: appleboy/ssh-action@v1.0.3
         env:
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
           REPO_URL: ${{ secrets.REPO_URL }}
           REPO_PAT: ${{ secrets.REPO_PAT }}
           CLIENTSERVICE_ENV: ${{ secrets.CLIENTSERVICE_ENV }}
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}          # dùng để log URL
+          PUBLIC_BASE_URL: ${{ secrets.PUBLIC_BASE_URL }}  # (optional) ví dụ https://api.edusmart.pro.vn
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: 22
-          envs: DEPLOY_PATH,REPO_URL,REPO_PAT,CLIENTSERVICE_ENV
+          envs: DEPLOY_PATH,REPO_URL,REPO_PAT,CLIENTSERVICE_ENV,SERVER_HOST,PUBLIC_BASE_URL
           script: |
             set -euo pipefail
 
@@ -29,42 +31,39 @@ jobs:
             : "${REPO_URL:?Missing REPO_URL}"
             : "${REPO_PAT:?Missing REPO_PAT}"
             : "${CLIENTSERVICE_ENV:?Missing CLIENTSERVICE_ENV}"
-
-            mkdir -p "$DEPLOY_PATH"
-            cd "$DEPLOY_PATH"
+            : "${SERVER_HOST:?Missing SERVER_HOST}"
 
             APP_DIR="Backend"
             COMPOSE_FILE="$APP_DIR/docker-compose.yml"
 
-            # cert bạn đang có sẵn ở root/.https
-            CERT_ROOT="./.https/aspnetapp.pfx"
+            CERT_ROOT=".https/aspnetapp.pfx"
             CERT_BACKEND="$APP_DIR/.https/aspnetapp.pfx"
-            ENV_PATH="$APP_DIR/.env"
 
-            # 1) Clone/Pull source
+            SECRETS_DIR="/root/.secrets"
+            ENV_FILE="$SECRETS_DIR/clientservice.env"
+
+            mkdir -p "$DEPLOY_PATH"
+            cd "$DEPLOY_PATH"
+            mkdir -p ./.https
+
+            # Clone/Pull
             if [ -d ".git" ]; then
               git fetch --all
               git reset --hard origin/main
             else
-              # backup cert root nếu có
-              CERT_TMP="/tmp/aspnetapp.pfx"
-              if [ -f "$CERT_ROOT" ]; then cp "$CERT_ROOT" "$CERT_TMP"; fi
-
               shopt -s dotglob nullglob
-              rm -rf -- *
+              for item in * .*; do
+                case "$item" in
+                  "."|".."|".https") continue ;;
+                  *) rm -rf "$item" ;;
+                esac
+              done
               shopt -u dotglob nullglob
 
               git clone "https://x-access-token:${REPO_PAT}@${REPO_URL#https://}" .
-
-              # restore cert root
-              if [ -f "$CERT_TMP" ]; then
-                mkdir -p ./.https
-                mv "$CERT_TMP" "$CERT_ROOT"
-                chmod 600 "$CERT_ROOT" || true
-              fi
             fi
 
-            # 2) Check compose exists
+            # Validate compose
             if [ ! -f "$COMPOSE_FILE" ]; then
               echo "Missing compose file: $COMPOSE_FILE"
               ls -la
@@ -72,29 +71,57 @@ jobs:
               exit 1
             fi
 
-            # 3) Verify cert exists at root/.https
+            # Validate cert
             if [ ! -f "$CERT_ROOT" ]; then
-              echo "Missing $CERT_ROOT on VPS. You created it before, put it here."
+              echo "Missing $DEPLOY_PATH/$CERT_ROOT on VPS."
               exit 1
             fi
             chmod 600 "$CERT_ROOT" || true
 
-            # 4) Ensure Backend/.https points to root cert
+            # Link cert into Backend
             mkdir -p "$APP_DIR/.https"
-
-            # dùng symlink (ưu tiên). nếu fail thì copy
-            ln -sf "../../.https/aspnetapp.pfx" "$CERT_BACKEND" || cp -f "$CERT_ROOT" "$CERT_BACKEND"
+            ln -sf "../../$CERT_ROOT" "$CERT_BACKEND" || cp -f "$CERT_ROOT" "$CERT_BACKEND"
             chmod 600 "$CERT_BACKEND" || true
 
-            # 5) Create .env into Backend/.env
-            printf '%s' "$CLIENTSERVICE_ENV" > "$ENV_PATH"
-            chmod 600 "$ENV_PATH"
+            # Write env to safe place
+            mkdir -p "$SECRETS_DIR"
+            printf '%s' "$CLIENTSERVICE_ENV" > "$ENV_FILE"
+            chmod 600 "$ENV_FILE"
 
-            # 6) Deploy inside Backend
+            # Deploy
             cd "$APP_DIR"
-            docker compose -f docker-compose.yml up -d --build --remove-orphans
+            docker compose version || true
+            docker compose --env-file "$ENV_FILE" -f docker-compose.yml up -d --build --remove-orphans
 
-            # 7) Remove .env after deploy (optional)
-            rm -f ./.env
+            echo ""
+            echo "===== DEPLOY RESULT ====="
+            docker compose -f docker-compose.yml ps || true
+            echo ""
+
+            # ---- Print HTTPS URL(s) ----
+            # Lấy port publish từ docker (ưu tiên 443, sau đó 8443, 7218, 443xx...)
+            HTTPS_PORT="$(docker ps --format '{{.Ports}}' | tr ',' '\n' | grep -Eo '0\.0\.0\.0:[0-9]+->(443|8443|7218)/tcp' | head -n1 | sed -E 's/0\.0\.0\.0:([0-9]+)->.*/\1/' || true)"
+
+            if [ -z "${HTTPS_PORT:-}" ]; then
+              # fallback: tìm port publish bất kỳ map tới 443 trong container
+              HTTPS_PORT="$(docker ps --format '{{.Ports}}' | tr ',' '\n' | grep -Eo '0\.0\.0\.0:[0-9]+->443/tcp' | head -n1 | sed -E 's/0\.0\.0\.0:([0-9]+)->.*/\1/' || true)"
+            fi
+
+            if [ -n "${HTTPS_PORT:-}" ]; then
+              if [ "$HTTPS_PORT" = "443" ]; then
+                echo "✅ HTTPS URL (direct): https://${SERVER_HOST}"
+              else
+                echo "✅ HTTPS URL (direct): https://${SERVER_HOST}:${HTTPS_PORT}"
+              fi
+            else
+              echo "⚠️ Không tìm thấy port HTTPS publish (443/8443/7218)."
+              echo "   Hãy kiểm tra 'ports:' trong Backend/docker-compose.yml hoặc container đang expose port nào."
+            fi
+
+            if [ -n "${PUBLIC_BASE_URL:-}" ]; then
+              echo "✅ Public URL (domain): ${PUBLIC_BASE_URL}"
+            fi
+
+            echo "========================="
 
             docker image prune -f
