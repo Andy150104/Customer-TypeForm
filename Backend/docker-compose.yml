@@ -28,6 +28,7 @@ services:
       - "7217:7217"
       - "7218:7218"
     volumes:
-      # Put aspnetapp.pfx inside ./ .https/aspnetapp.pfx (host) to enable HTTPS
+      # Keep it simple/reliable: mount the repo-local cert folder (./.https/aspnetapp.pfx).
+      # This avoids Windows path/env quirks in Docker Desktop.
       - ./.https:/https:ro
 
