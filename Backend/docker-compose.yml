@@ -1,0 +1,25 @@
+services:
+  # redis:
+  #   image: redis:7-alpine
+  #   ports:
+  #     - "6379:6379"
+  clientservice-api:
+    build:
+      context: ./Services/ClientService
+      dockerfile: ClientService.API/Dockerfile
+    depends_on:
+      - redis
+    env_file:
+      - .env
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+      ASPNETCORE_URLS: ${ASPNETCORE_URLS:-http://+:7217}
+      CLIENT_SERVICE_DB: ${CLIENT_SERVICE_DB}
+      REDIS_CACHE_CONNECTION: ${REDIS_CACHE_CONNECTION}
+      CLIENT_ID: ${CLIENT_ID:-service_client}
+      CLIENT_SECRET: ${CLIENT_SECRET:-EduSmartAI-Capstone-Project}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-service_client}
+      AUTH_SERVICE_URL: ${AUTH_SERVICE_URL:-http://localhost:7217/}
+    ports:
+      - "7217:7217"
+
