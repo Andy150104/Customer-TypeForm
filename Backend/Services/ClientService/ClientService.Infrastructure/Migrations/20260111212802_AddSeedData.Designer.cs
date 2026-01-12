@@ -4,6 +4,7 @@ using System.Text.Json;
 using ClientService.Infrastructure.Contexts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace ClientService.Infrastructure.Migrations
 {
     [DbContext(typeof(FormsDbContext))]
-    partial class FormsDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260111212802_AddSeedData")]
+    partial class AddSeedData
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -136,7 +139,7 @@ namespace ClientService.Infrastructure.Migrations
                         .HasColumnName("id");
 
                     b.Property<DateTime?>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("timestamp")
                         .HasColumnName("created_at");
 
                     b.Property<string>("CreatedBy")
@@ -156,7 +159,7 @@ namespace ClientService.Infrastructure.Migrations
                         .HasColumnName("submission_id");
 
                     b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("timestamp")
                         .HasColumnName("updated_at");
 
                     b.Property<string>("UpdatedBy")
@@ -185,7 +188,7 @@ namespace ClientService.Infrastructure.Migrations
                         .HasColumnName("id");
 
                     b.Property<DateTime?>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("timestamp")
                         .HasColumnName("created_at");
 
                     b.Property<string>("CreatedBy")
@@ -227,7 +230,7 @@ namespace ClientService.Infrastructure.Migrations
                         .HasColumnName("type");
 
                     b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("timestamp")
                         .HasColumnName("updated_at");
 
                     b.Property<string>("UpdatedBy")
@@ -281,7 +284,7 @@ namespace ClientService.Infrastructure.Migrations
                         .HasColumnName("id");
 
                     b.Property<DateTime?>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("timestamp")
                         .HasColumnName("created_at");
 
                     b.Property<string>("CreatedBy")
@@ -314,7 +317,7 @@ namespace ClientService.Infrastructure.Migrations
                         .HasColumnName("title");
 
                     b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("timestamp")
                         .HasColumnName("updated_at");
 
                     b.Property<string>("UpdatedBy")
@@ -360,7 +363,7 @@ namespace ClientService.Infrastructure.Migrations
                         .HasColumnName("condition");
 
                     b.Property<DateTime?>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("timestamp")
                         .HasColumnName("created_at");
 
                     b.Property<string>("CreatedBy")
@@ -380,7 +383,7 @@ namespace ClientService.Infrastructure.Migrations
                         .HasColumnName("is_active");
 
                     b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("timestamp")
                         .HasColumnName("updated_at");
 
                     b.Property<string>("UpdatedBy")
@@ -423,7 +426,7 @@ namespace ClientService.Infrastructure.Migrations
                         .HasColumnName("id");
 
                     b.Property<DateTime?>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("timestamp")
                         .HasColumnName("created_at");
 
                     b.Property<string>("CreatedBy")
@@ -443,7 +446,7 @@ namespace ClientService.Infrastructure.Migrations
                         .HasColumnName("meta_data");
 
                     b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("timestamp")
                         .HasColumnName("updated_at");
 
                     b.Property<string>("UpdatedBy")

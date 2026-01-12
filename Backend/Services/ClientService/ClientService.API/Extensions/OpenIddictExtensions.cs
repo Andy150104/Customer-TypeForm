@@ -23,9 +23,13 @@ public static class OpenIddictExtensions
 
                 options.AllowPasswordFlow();
                 options.AllowRefreshTokenFlow();
+                
                 // Make access_token an opaque reference token (same style as refresh_token).
                 options.UseReferenceAccessTokens();
                 options.UseReferenceRefreshTokens();
+                
+                // Disable encryption for reference tokens (they're stored in DB, not in token itself)
+                options.DisableAccessTokenEncryption();
 
                 options.RegisterScopes(
                     OpenIddictConstants.Scopes.OpenId,
@@ -33,10 +37,15 @@ public static class OpenIddictExtensions
                     OpenIddictConstants.Scopes.Roles,
                     OpenIddictConstants.Scopes.OfflineAccess);
 
-                // OpenIddict requires at least one encryption key (even if access token encryption is disabled).
-                // For development, use an ephemeral key.
-                options.AddEphemeralEncryptionKey();
+                // Use development certificates (persistent across restarts)
+                // For reference tokens, we still need encryption key for internal operations,
+                // but access tokens themselves are not encrypted
+                options.AddDevelopmentEncryptionCertificate();
                 options.AddDevelopmentSigningCertificate();
+                
+                // Set token lifetimes
+                options.SetAccessTokenLifetime(TimeSpan.FromHours(1));
+                options.SetRefreshTokenLifetime(TimeSpan.FromHours(2));
 
                 options.UseAspNetCore()
                     .EnableTokenEndpointPassthrough()

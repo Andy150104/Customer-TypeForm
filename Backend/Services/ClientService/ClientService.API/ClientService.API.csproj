@@ -23,9 +23,11 @@
     <PackageReference Include="OpenIddict.Validation.SystemNetHttp" Version="7.0.0" />
     <PackageReference Include="StackExchange.Redis" Version="2.8.58" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
+    <PackageReference Include="Swashbuckle.AspNetCore.Annotations" Version="6.6.2" />
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\BaseService\BaseService.API\BaseService.API.csproj" />
     <ProjectReference Include="..\..\BaseService\BaseService.Common\BaseService.Common.csproj" />
     <ProjectReference Include="..\..\BaseService\BaseService.Infrastructure\BaseService.Infrastructure.csproj" />
     <ProjectReference Include="..\ClientService.Application\ClientService.Application.csproj" />
