@@ -24,21 +24,25 @@ public static class AuthenticationExtensions
         });
 
         services.AddOpenIddict()
+            .AddCore(options =>
+            {
+                // Use same database context as server to validate tokens
+                options.UseEntityFrameworkCore()
+                    .UseDbContext<ClientService.Infrastructure.Contexts.FormsDbContext>()
+                    .ReplaceDefaultEntities<Guid>();
+            })
             .AddValidation(options =>
             {
-                // Tokens are issued by ClientService (via /connect/token endpoint)
-                // So validation must validate from ClientService itself (self-introspection)
-                // Get ClientService URL from configuration
-                var urls = configuration.GetValue<string>("ASPNETCORE_URLS")?.Split(';') ?? Array.Empty<string>();
-                var clientServiceUrl = urls.FirstOrDefault(u => u.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
-                    ?? urls.FirstOrDefault()
-                    ?? "https://localhost:7217";
+                // Get issuer URL from environment variable
+                var authServiceUrl = Environment.GetEnvironmentVariable(ConstEnv.AuthServiceUrl);
+                if (string.IsNullOrWhiteSpace(authServiceUrl))
+                {
+                    throw new InvalidOperationException($"Environment variable '{ConstEnv.AuthServiceUrl}' is not set.");
+                }
                 
                 // Remove trailing slash for issuer
-                // OpenIddict will automatically construct introspection endpoint as {issuer}/connect/introspect
-                var issuer = clientServiceUrl.TrimEnd('/');
-                options.SetIssuer(issuer);
-
+                var issuer = authServiceUrl.TrimEnd('/');
+                
                 // Get audience from environment variables
                 var audience = Environment.GetEnvironmentVariable(ConstEnv.JwtAudience);
                 if (string.IsNullOrWhiteSpace(audience))
@@ -54,16 +58,28 @@ public static class AuthenticationExtensions
                     throw new InvalidOperationException($"Environment variables '{ConstEnv.ClientId}' or '{ConstEnv.ClientSecret}' are not set.");
                 }
 
-                // Use introspection endpoint to validate reference tokens from ClientService itself (self-introspection)
-                // OpenIddict automatically constructs the introspection endpoint URL as {issuer}/connect/introspect
-                // This will call ClientService's /connect/introspect endpoint to validate tokens
+                // Use introspection endpoint to validate reference tokens
+                // Since tokens are issued by ClientService itself, introspection will call /connect/introspect
+                // OpenIddict will automatically construct introspection endpoint as {issuer}/connect/introspect
+                options.SetIssuer(issuer);
                 options.UseIntrospection()
                     .AddAudiences(audience)
                     .SetClientId(clientId)
                     .SetClientSecret(clientSecret);
 
                 // Integrate with ASP.NET Core
-                options.UseSystemNetHttp();
+                // Configure HttpClient to bypass SSL certificate validation for development
+                options.UseSystemNetHttp(httpClient =>
+                {
+                    httpClient.ConfigureHttpClientHandler(handler =>
+                    {
+                        handler.ServerCertificateCustomValidationCallback = (message, cert, chain, errors) =>
+                        {
+                            // In development, allow self-signed certificates
+                            return true;
+                        };
+                    });
+                });
                 options.UseAspNetCore();
             });
 

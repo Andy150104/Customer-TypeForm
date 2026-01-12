@@ -17,6 +17,14 @@ public static class OpenIddictExtensions
             })
             .AddServer(options =>
             {
+                // Get issuer URL from environment variable to ensure tokens are issued with correct issuer
+                var authServiceUrl = Environment.GetEnvironmentVariable("AUTH_SERVICE_URL");
+                if (!string.IsNullOrWhiteSpace(authServiceUrl))
+                {
+                    var issuer = authServiceUrl.TrimEnd('/');
+                    options.SetIssuer(new Uri(issuer));
+                }
+                
                 options.SetTokenEndpointUris("/connect/token");
                 options.SetIntrospectionEndpointUris("/connect/introspect");
                 options.SetRevocationEndpointUris("/connect/revoke");
