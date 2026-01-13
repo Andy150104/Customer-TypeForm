@@ -26,7 +26,20 @@ public class OpenIddictSeederHostedService : IHostedService
         var clientSecret = Environment.GetEnvironmentVariable(ConstEnv.ClientSecret) ?? "EduSmartAI-Capstone-Project";
 
         var existing = await manager.FindByClientIdAsync(clientId, cancellationToken);
-        if (existing != null) return;
+        if (existing != null)
+        {
+            // Update existing application to include google grant type permission
+            var existingDescriptor = new OpenIddictApplicationDescriptor();
+            await manager.PopulateAsync(existingDescriptor, existing, cancellationToken);
+            var googlePermission = OpenIddictConstants.Permissions.Prefixes.GrantType + "google";
+            
+            if (!existingDescriptor.Permissions.Contains(googlePermission))
+            {
+                existingDescriptor.Permissions.Add(googlePermission);
+                await manager.UpdateAsync(existing, existingDescriptor, cancellationToken);
+            }
+            return;
+        }
 
         var descriptor = new OpenIddictApplicationDescriptor
         {
@@ -37,13 +50,15 @@ public class OpenIddictSeederHostedService : IHostedService
             ConsentType = OpenIddictConstants.ConsentTypes.Implicit
         };
 
-        // Minimal permissions for password + refresh token flow.
+        // Minimal permissions for password + refresh token + google flow.
         descriptor.Permissions.Add(OpenIddictConstants.Permissions.Endpoints.Token);
         descriptor.Permissions.Add(OpenIddictConstants.Permissions.Endpoints.Introspection);
         descriptor.Permissions.Add(OpenIddictConstants.Permissions.Endpoints.Revocation);
 
         descriptor.Permissions.Add(OpenIddictConstants.Permissions.GrantTypes.Password);
         descriptor.Permissions.Add(OpenIddictConstants.Permissions.GrantTypes.RefreshToken);
+        // Add permission for custom "google" grant type
+        descriptor.Permissions.Add(OpenIddictConstants.Permissions.Prefixes.GrantType + "google");
 
         descriptor.Permissions.Add(OpenIddictConstants.Permissions.Prefixes.Scope + OpenIddictConstants.Scopes.OpenId);
         descriptor.Permissions.Add(OpenIddictConstants.Permissions.Scopes.Profile);

@@ -31,6 +31,7 @@ public static class OpenIddictExtensions
 
                 options.AllowPasswordFlow();
                 options.AllowRefreshTokenFlow();
+                options.AllowCustomFlow("google");
                 
                 // Make access_token an opaque reference token (same style as refresh_token).
                 options.UseReferenceAccessTokens();

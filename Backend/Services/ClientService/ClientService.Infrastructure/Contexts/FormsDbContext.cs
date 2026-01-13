@@ -223,9 +223,11 @@ public class FormsDbContext : AppDbContext
                 {
                     Id = Guid.Parse("33333333-3333-3333-3333-333333333333"),
                     FieldId = sampleFieldId1,
-                    Condition = "equals",
+                    Condition = LogicCondition.Is,
                     Value = "John Doe",
                     DestinationFieldId = sampleFieldId2,
+                    Order = 0,
+                    LogicGroupId = null,
                     CreatedAt = seedDateTime,
                     UpdatedAt = seedDateTime,
                     CreatedBy = "System",

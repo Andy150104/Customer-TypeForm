@@ -17,6 +17,10 @@ public static class RepositoryExtensions
         services.AddScoped<ICommandRepository<User>, CommandRepository<User>>();
         services.AddScoped<ICommandRepository<Role>, CommandRepository<Role>>();
         services.AddScoped<ICommandRepository<Form>, CommandRepository<Form>>();
+        services.AddScoped<ICommandRepository<Field>, CommandRepository<Field>>();
+        services.AddScoped<ICommandRepository<Logic>, CommandRepository<Logic>>();
+        services.AddScoped<ICommandRepository<Submission>, CommandRepository<Submission>>();
+        services.AddScoped<ICommandRepository<Answer>, CommandRepository<Answer>>();
         return services;
     }
 
@@ -25,6 +29,8 @@ public static class RepositoryExtensions
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<ITokenService, TokenService>();
         services.AddScoped<IFormService, FormService>();
+        services.AddScoped<IFieldService, FieldService>();
+        services.AddScoped<ILogicService, LogicService>();
         return services;
     }
 }

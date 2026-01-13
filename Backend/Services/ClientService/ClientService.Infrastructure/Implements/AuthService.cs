@@ -5,6 +5,7 @@ using BaseService.Domain.Entities;
 using ClientService.Application.Accounts.Commands.Applications;
 using ClientService.Application.Accounts.Commands.Logins;
 using ClientService.Application.Accounts.Commands.Registers;
+using ClientService.Application.Accounts.Commands.GoogleLogins;
 using ClientService.Application.Interfaces.AuthServices;
 using Microsoft.EntityFrameworkCore;
 using OpenIddict.Abstractions;
@@ -177,6 +178,132 @@ public class AuthService : IAuthService
         {
             response.Success = false;
             response.SetMessage(MessageId.E00000, $"Login failed: {ex.Message}");
+            return response;
+        }
+    }
+
+    /// <summary>
+    /// Login or register with Google
+    /// If GoogleId exists, login. Otherwise, create new user.
+    /// </summary>
+    public async Task<GoogleLoginCommandResponse> GoogleLoginAsync(GoogleLoginCommand request, CancellationToken cancellationToken)
+    {
+        var response = new GoogleLoginCommandResponse();
+
+        try
+        {
+            if (string.IsNullOrWhiteSpace(request.GoogleId))
+            {
+                response.Success = false;
+                response.SetMessage(MessageId.E10000, "GoogleId is required.");
+                return response;
+            }
+
+            if (string.IsNullOrWhiteSpace(request.Name))
+            {
+                response.Success = false;
+                response.SetMessage(MessageId.E10000, "Name is required.");
+                return response;
+            }
+
+            // Check if user with this GoogleId already exists
+            var existingUser = await _userRepository.FirstOrDefaultAsync(
+                u => u!.GoogleId == request.GoogleId && u.IsActive,
+                cancellationToken,
+                u => u.Role!);
+
+            User user;
+            bool isNewUser = false;
+
+            if (existingUser != null)
+            {
+                // User exists, update name and avatar if provided
+                user = existingUser;
+                if (!string.IsNullOrWhiteSpace(request.Name))
+                {
+                    user.Name = request.Name;
+                }
+                if (!string.IsNullOrWhiteSpace(request.Avatar))
+                {
+                    user.Avatar = request.Avatar;
+                }
+                user.UpdatedAt = DateTime.UtcNow;
+                user.UpdatedBy = "Google Login";
+                
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
+            }
+            else
+            {
+                // User doesn't exist, create new user
+                isNewUser = true;
+                
+                // Get default role (Student role)
+                var defaultRole = await _roleRepository
+                    .Find(r => r!.NormalizedName == "USER" && r.IsActive, cancellationToken: cancellationToken)
+                    .FirstOrDefaultAsync(cancellationToken);
+
+                // Generate email if not provided (use GoogleId as fallback)
+                var email = request.Email ?? $"{request.GoogleId}@google.local";
+
+                // Check if email already exists
+                var emailExists = await _userRepository
+                    .Find(u => u!.Email == email && u.IsActive, cancellationToken: cancellationToken)
+                    .AnyAsync(cancellationToken);
+
+                if (emailExists)
+                {
+                    // If email exists, append GoogleId to make it unique
+                    email = $"{request.GoogleId}_{email}";
+                }
+
+                user = new User
+                {
+                    Id = Guid.NewGuid(),
+                    Email = email,
+                    Name = request.Name,
+                    Avatar = request.Avatar,
+                    GoogleId = request.GoogleId,
+                    RoleId = defaultRole?.Id,
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow,
+                    CreatedBy = "Google Login",
+                    UpdatedBy = "Google Login"
+                };
+
+                await _userRepository.AddAsync(user);
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+                // Reload with role
+                var reloadedUser = await _userRepository.FirstOrDefaultAsync(
+                    u => u!.Id == user.Id && u.IsActive,
+                    cancellationToken,
+                    u => u.Role!);
+                
+                if (reloadedUser != null)
+                {
+                    user = reloadedUser;
+                }
+            }
+
+            response.Success = true;
+            response.SetMessage(MessageId.I00001, isNewUser ? "User created and logged in successfully." : "Login successful.");
+            response.Response = new GoogleLoginResponseEntity
+            {
+                UserId = user.Id,
+                Email = user.Email,
+                FullName = user.Name ?? user.Email,
+                RoleName = user.Role?.Name ?? string.Empty,
+                AvatarUrl = user.Avatar,
+                IsNewUser = isNewUser
+            };
+
+            return response;
+        }
+        catch (Exception ex)
+        {
+            response.Success = false;
+            response.SetMessage(MessageId.E00000, $"Google login failed: {ex.Message}");
             return response;
         }
     }

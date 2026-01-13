@@ -1,4 +1,8 @@
 using ClientService.Application.Forms.Commands.CreateForm;
+using ClientService.Application.Forms.Commands.SubmitForm;
+using ClientService.Application.Forms.Commands.UpdateFormPublishedStatus;
+using ClientService.Application.Forms.Queries.GetFormWithFieldsAndLogic;
+using ClientService.Application.Forms.Queries.GetForms;
 
 namespace ClientService.Application.Interfaces.FormServices;
 
@@ -11,4 +15,37 @@ public interface IFormService
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
     Task<CreateFormCommandResponse> CreateFormAsync(CreateFormCommand request, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Get all forms for the current user
+    /// </summary>
+    /// <param name="request"></param>
+    /// <param name="cancellationToken"></param>
+    /// <returns></returns>
+    Task<GetFormsQueryResponse> GetFormsAsync(GetFormsQuery request, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Get form with fields and logic rules
+    /// </summary>
+    /// <param name="request"></param>
+    /// <param name="cancellationToken"></param>
+    /// <returns></returns>
+    Task<GetFormWithFieldsAndLogicQueryResponse> GetFormWithFieldsAndLogicAsync(GetFormWithFieldsAndLogicQuery request, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Update form published status
+    /// If IsPublished = true, validates that form has at least one field
+    /// </summary>
+    /// <param name="request"></param>
+    /// <param name="cancellationToken"></param>
+    /// <returns></returns>
+    Task<UpdateFormPublishedStatusCommandResponse> UpdateFormPublishedStatusAsync(UpdateFormPublishedStatusCommand request, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Submit a form with answers
+    /// </summary>
+    /// <param name="request"></param>
+    /// <param name="cancellationToken"></param>
+    /// <returns></returns>
+    Task<SubmitFormCommandResponse> SubmitFormAsync(SubmitFormCommand request, CancellationToken cancellationToken);
 }

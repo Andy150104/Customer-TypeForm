@@ -1,6 +1,7 @@
 using ClientService.Application.Accounts.Commands.Logins;
 using ClientService.Application.Accounts.Commands.Registers;
 using ClientService.Application.Accounts.Commands.Applications;
+using ClientService.Application.Accounts.Commands.GoogleLogins;
 using ClientService.Application.Dtos;
 using ClientService.Application.Interfaces.TokenServices;
 using BaseService.Common.Utils.Const;
@@ -42,37 +43,46 @@ public class AuthController : ControllerBase
     [Produces("application/json")]
     public async Task<IActionResult> Exchange()
     {
+        // OpenIddict chỉ tự động parse các standard parameters (username, password) cho standard grant types
+        // Với custom grant type "google", OpenIddict KHÔNG tự động parse các custom parameters (googleId, name, avatar, email)
+        // Vì vậy PHẢI đọc trực tiếp từ form data để lấy tất cả parameters
+        var form = await Request.ReadFormAsync();
         var openIdRequest = HttpContext.GetOpenIddictServerRequest();
-        // In case OpenIddict didn't populate the request (often due to malformed form post),
-        // fall back to reading the form directly to avoid NullReferenceException.
-        var grantType = openIdRequest?.GrantType;
-        var username = openIdRequest?.Username;
-        var password = openIdRequest?.Password;
+        
+        // Lấy grant_type từ form (vì OpenIddict có thể chưa parse cho custom grant type)
+        var grantType = form["grant_type"].ToString();
+        
+        // Lấy standard parameters từ openIdRequest (nếu có) hoặc form (fallback)
+        var username = openIdRequest?.Username ?? form["username"].ToString();
+        var password = openIdRequest?.Password ?? form["password"].ToString();
+        
+        // Google login parameters - CHỈ có trong form data, OpenIddict không parse
+        string? googleId = form["googleId"].ToString();
+        string? name = form["name"].ToString();
+        string? avatar = form["avatar"].ToString();
+        string? email = form["email"].ToString();
 
-        if (openIdRequest is null)
-        {
-            try
-            {
-                var form = await Request.ReadFormAsync();
-                grantType = form["grant_type"].ToString();
-                username = form["username"].ToString();
-                password = form["password"].ToString();
-            }
-            catch
-            {
-                // ignore and handle below
-            }
-        }
-
-        var request = new UserLoginCommand(
-            UserName: username ?? string.Empty,
-            Password: password ?? string.Empty
-        );
-
-        // Password
+        // Password grant type
         if (string.Equals(grantType, OpenIddictConstants.GrantTypes.Password, StringComparison.Ordinal))
         {
+            var request = new UserLoginCommand(
+                UserName: username ?? string.Empty,
+                Password: password ?? string.Empty
+            );
             return await TokensForPasswordGrantType(request);
+        }
+
+        // Google grant type
+        if (string.Equals(grantType, "google", StringComparison.OrdinalIgnoreCase))
+        {
+            var googleRequest = new GoogleLoginCommand
+            {
+                GoogleId = googleId ?? string.Empty,
+                Name = name ?? string.Empty,
+                Avatar = avatar,
+                Email = email
+            };
+            return await TokensForGoogleGrantType(googleRequest);
         }
 
         // Refresh token
@@ -208,6 +218,42 @@ public class AuthController : ControllerBase
                 errorResponse.Error = OpenIddictConstants.Errors.InvalidGrant;
                 errorResponse.ErrorDescription = "An unexpected error occurred during login.";
             }
+
+            return BadRequest(errorResponse);
+        }
+
+        var loginResponse = loginResult.Response;
+
+        var userLoginDto = new UserLoginDto
+        {
+            UserId = loginResponse.UserId,
+            Email = loginResponse.Email,
+            FullName = loginResponse.FullName,
+            RoleName = loginResponse.RoleName,
+            AvatarUrl = loginResponse.AvatarUrl
+        };
+
+        var claimsPrincipal = await _tokenService.GenerateClaimsPrincipal(userLoginDto);
+
+        // Generate access and refresh tokens
+        return SignIn(claimsPrincipal, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+    }
+
+    /// <summary>
+    /// Handle Google grant type
+    /// </summary>
+    /// <param name="request"></param>
+    /// <returns></returns>
+    private async Task<IActionResult> TokensForGoogleGrantType(GoogleLoginCommand request)
+    {
+        var loginResult = await _mediator.Send(request);
+        if (!loginResult.Success)
+        {
+            var errorResponse = new OpenIddictResponse
+            {
+                Error = OpenIddictConstants.Errors.InvalidGrant,
+                ErrorDescription = loginResult.Message
+            };
 
             return BadRequest(errorResponse);
         }

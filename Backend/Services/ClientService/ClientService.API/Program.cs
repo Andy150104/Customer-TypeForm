@@ -6,7 +6,14 @@ var builder = WebApplication.CreateBuilder(args);
 // Load environment variables
 EnvLoader.Load();
 
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .ConfigureApiBehaviorOptions(options =>
+    {
+        // Disable automatic model state validation
+        // Validation errors will be handled manually in ApiControllerHelper.HandleRequest
+        // This ensures consistent error response format across all endpoints
+        options.SuppressModelStateInvalidFilter = true;
+    });
 builder.Services
     .AddClientServiceSwagger()
     .AddClientServiceCors()
