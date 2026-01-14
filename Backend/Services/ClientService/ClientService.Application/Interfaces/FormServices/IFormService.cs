@@ -3,6 +3,9 @@ using ClientService.Application.Forms.Commands.SubmitForm;
 using ClientService.Application.Forms.Commands.UpdateFormPublishedStatus;
 using ClientService.Application.Forms.Queries.GetFormWithFieldsAndLogic;
 using ClientService.Application.Forms.Queries.GetForms;
+using ClientService.Application.Forms.Queries.GetPublishedFormWithFieldsAndLogic;
+using ClientService.Application.Forms.Queries.GetSubmissions;
+using ClientService.Application.Forms.Queries.GetSubmissionById;
 
 namespace ClientService.Application.Interfaces.FormServices;
 
@@ -33,6 +36,14 @@ public interface IFormService
     Task<GetFormWithFieldsAndLogicQueryResponse> GetFormWithFieldsAndLogicAsync(GetFormWithFieldsAndLogicQuery request, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Get published form with fields and logic rules (public endpoint)
+    /// </summary>
+    /// <param name="request"></param>
+    /// <param name="cancellationToken"></param>
+    /// <returns></returns>
+    Task<GetPublishedFormWithFieldsAndLogicQueryResponse> GetPublishedFormWithFieldsAndLogicAsync(GetPublishedFormWithFieldsAndLogicQuery request, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Update form published status
     /// If IsPublished = true, validates that form has at least one field
     /// </summary>
@@ -48,4 +59,20 @@ public interface IFormService
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
     Task<SubmitFormCommandResponse> SubmitFormAsync(SubmitFormCommand request, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Get all submissions for a form
+    /// </summary>
+    /// <param name="request"></param>
+    /// <param name="cancellationToken"></param>
+    /// <returns></returns>
+    Task<GetSubmissionsQueryResponse> GetSubmissionsAsync(GetSubmissionsQuery request, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Get submission by ID (public endpoint for submitter to view their submission)
+    /// </summary>
+    /// <param name="request"></param>
+    /// <param name="cancellationToken"></param>
+    /// <returns></returns>
+    Task<GetSubmissionByIdQueryResponse> GetSubmissionByIdAsync(GetSubmissionByIdQuery request, CancellationToken cancellationToken);
 }

@@ -18,6 +18,7 @@ public static class RepositoryExtensions
         services.AddScoped<ICommandRepository<Role>, CommandRepository<Role>>();
         services.AddScoped<ICommandRepository<Form>, CommandRepository<Form>>();
         services.AddScoped<ICommandRepository<Field>, CommandRepository<Field>>();
+        services.AddScoped<ICommandRepository<FieldOption>, CommandRepository<FieldOption>>();
         services.AddScoped<ICommandRepository<Logic>, CommandRepository<Logic>>();
         services.AddScoped<ICommandRepository<Submission>, CommandRepository<Submission>>();
         services.AddScoped<ICommandRepository<Answer>, CommandRepository<Answer>>();

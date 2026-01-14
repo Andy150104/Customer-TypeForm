@@ -26,6 +26,7 @@ public class FormsDbContext : AppDbContext
     // Forms entities
     public DbSet<Form> Forms { get; set; } = null!;
     public DbSet<Field> Fields { get; set; } = null!;
+    public DbSet<FieldOption> FieldOptions { get; set; } = null!;
     public DbSet<Logic> Logic { get; set; } = null!;
     public DbSet<Submission> Submissions { get; set; } = null!;
     public DbSet<Answer> Answers { get; set; } = null!;
@@ -186,6 +187,29 @@ public class FormsDbContext : AppDbContext
             );
         });
 
+        // Configure FieldOption entity
+        modelBuilder.Entity<FieldOption>(entity =>
+        {
+            entity.ToTable("field_options");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("id").HasColumnType("uuid");
+            entity.Property(e => e.FieldId).HasColumnName("field_id").HasColumnType("uuid").IsRequired();
+            entity.Property(e => e.Label).HasColumnName("label").HasColumnType("varchar").IsRequired();
+            entity.Property(e => e.Value).HasColumnName("value").HasColumnType("varchar").IsRequired();
+            entity.Property(e => e.Order).HasColumnName("\"order\""); // Escape order as it's a reserved keyword
+            entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp with time zone");
+            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamp with time zone");
+            entity.Property(e => e.CreatedBy).HasColumnName("created_by").HasColumnType("varchar");
+            entity.Property(e => e.UpdatedBy).HasColumnName("updated_by").HasColumnType("varchar");
+            entity.Property(e => e.IsActive).HasColumnName("is_active");
+
+            // Relationship: FieldOption -> Field
+            entity.HasOne(o => o.Field)
+                .WithMany(f => f.Options)
+                .HasForeignKey(o => o.FieldId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
         // Configure Logic entity
         modelBuilder.Entity<Logic>(entity =>
         {
@@ -284,6 +308,7 @@ public class FormsDbContext : AppDbContext
             entity.Property(e => e.SubmissionId).HasColumnName("submission_id").HasColumnType("uuid").IsRequired();
             entity.Property(e => e.FieldId).HasColumnName("field_id").HasColumnType("uuid").IsRequired();
             entity.Property(e => e.Value).HasColumnName("value").HasColumnType("jsonb").IsRequired();
+            entity.Property(e => e.FieldOptionId).HasColumnName("field_option_id").HasColumnType("uuid");
             entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp with time zone");
             entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamp with time zone");
             entity.Property(e => e.CreatedBy).HasColumnName("created_by").HasColumnType("varchar");
@@ -301,6 +326,12 @@ public class FormsDbContext : AppDbContext
                 .WithMany(f => f.Answers)
                 .HasForeignKey(a => a.FieldId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            // Relationship: Answer -> FieldOption (optional)
+            entity.HasOne(a => a.FieldOption)
+                .WithMany()
+                .HasForeignKey(a => a.FieldOptionId)
+                .OnDelete(DeleteBehavior.SetNull); // If option is deleted, set to null but keep answer
 
             // Note: Answer seed data removed because JsonDocument cannot be seeded with HasData
             // Use migration SQL or DbContext seeding at runtime instead

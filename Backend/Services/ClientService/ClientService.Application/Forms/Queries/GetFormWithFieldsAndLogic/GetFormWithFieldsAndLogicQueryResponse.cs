@@ -1,5 +1,6 @@
 using BaseService.Common.ApiEntities;
 using System.Text.Json;
+using ClientService.Application.Forms.Queries.GetFieldsByFormId;
 
 namespace ClientService.Application.Forms.Queries.GetFormWithFieldsAndLogic;
 
@@ -11,7 +12,6 @@ public record GetFormWithFieldsAndLogicQueryResponse : AbstractApiResponse<FormW
 public class FormWithFieldsAndLogicResponseEntity
 {
     public Guid Id { get; set; }
-    public Guid UserId { get; set; }
     public string Title { get; set; } = null!;
     public string? Slug { get; set; }
     public JsonDocument? ThemeConfig { get; set; }
@@ -36,6 +36,7 @@ public class FieldWithLogicResponseEntity
     public DateTime? UpdatedAt { get; set; }
     public List<LogicRuleResponseEntity> LogicRules { get; set; } = new();
     public Guid? DefaultNextFieldId { get; set; } // Field tiếp theo theo Order (mặc định)
+    public List<FieldOptionResponseEntity>? Options { get; set; }
 }
 
 public class LogicRuleResponseEntity

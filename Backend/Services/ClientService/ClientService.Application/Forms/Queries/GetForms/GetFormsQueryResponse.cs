@@ -11,7 +11,6 @@ public record GetFormsQueryResponse : AbstractApiResponse<List<FormResponseEntit
 public class FormResponseEntity
 {
     public Guid Id { get; set; }
-    public Guid UserId { get; set; }
     public string Title { get; set; } = null!;
     public string? Slug { get; set; }
     public JsonDocument? ThemeConfig { get; set; }

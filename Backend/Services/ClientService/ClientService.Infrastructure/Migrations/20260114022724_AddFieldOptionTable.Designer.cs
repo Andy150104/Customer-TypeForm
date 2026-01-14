@@ -4,6 +4,7 @@ using System.Text.Json;
 using ClientService.Infrastructure.Contexts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace ClientService.Infrastructure.Migrations
 {
     [DbContext(typeof(FormsDbContext))]
-    partial class FormsDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260114022724_AddFieldOptionTable")]
+    partial class AddFieldOptionTable
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -147,10 +150,6 @@ namespace ClientService.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("field_id");
 
-                    b.Property<Guid?>("FieldOptionId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("field_option_id");
-
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean")
                         .HasColumnName("is_active");
@@ -175,8 +174,6 @@ namespace ClientService.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("FieldId");
-
-                    b.HasIndex("FieldOptionId");
 
                     b.HasIndex("SubmissionId");
 
@@ -759,11 +756,6 @@ namespace ClientService.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("ClientService.Domain.Entities.FieldOption", "FieldOption")
-                        .WithMany()
-                        .HasForeignKey("FieldOptionId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.HasOne("ClientService.Domain.Entities.Submission", "Submission")
                         .WithMany("Answers")
                         .HasForeignKey("SubmissionId")
@@ -771,8 +763,6 @@ namespace ClientService.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Field");
-
-                    b.Navigation("FieldOption");
 
                     b.Navigation("Submission");
                 });

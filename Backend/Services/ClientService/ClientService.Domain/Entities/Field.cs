@@ -27,4 +27,6 @@ public class Field : BaseEntity
     public ICollection<Logic> DestinationLogicRules { get; set; } = new List<Logic>();
     
     public ICollection<Answer> Answers { get; set; } = new List<Answer>();
+    
+    public ICollection<FieldOption> Options { get; set; } = new List<FieldOption>();
 }

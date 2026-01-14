@@ -94,7 +94,29 @@ public class LogicService : ILogicService
             {
                 // Check if there's a logic group already
                 var existingGroupId = existingLogics.FirstOrDefault(l => l!.LogicGroupId.HasValue)?.LogicGroupId;
-                logicGroupId = existingGroupId ?? Guid.NewGuid();
+                
+                if (existingGroupId.HasValue)
+                {
+                    // Use existing group
+                    logicGroupId = existingGroupId;
+                }
+                else
+                {
+                    // Create new group and update all existing logics to use this group
+                    logicGroupId = Guid.NewGuid();
+                    
+                    // Update all existing logics to have the same group ID
+                    foreach (var logicItem in existingLogics)
+                    {
+                        if (logicItem == null) continue;
+                        logicItem.LogicGroupId = logicGroupId;
+                        logicItem.UpdatedAt = DateTime.UtcNow;
+                        logicItem.UpdatedBy = currentUser.Email;
+                    }
+                    
+                    // Save changes for existing logics before creating new one
+                    await _unitOfWork.SaveChangesAsync(cancellationToken);
+                }
 
                 // Calculate order based on existing logics in the same group
                 var existingLogicsInGroup = existingLogics

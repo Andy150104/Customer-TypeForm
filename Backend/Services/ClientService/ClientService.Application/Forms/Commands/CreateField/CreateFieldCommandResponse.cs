@@ -1,4 +1,5 @@
 using BaseService.Common.ApiEntities;
+using ClientService.Application.Forms.Queries.GetFieldsByFormId;
 
 namespace ClientService.Application.Forms.Commands.CreateField;
 
@@ -18,4 +19,5 @@ public class CreateFieldResponseEntity
     public bool IsRequired { get; set; }
     public int Order { get; set; }
     public DateTime CreatedAt { get; set; }
+    public List<FieldOptionResponseEntity>? Options { get; set; }
 }

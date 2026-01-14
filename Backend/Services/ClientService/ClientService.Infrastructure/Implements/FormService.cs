@@ -4,10 +4,15 @@ using BaseService.Common.Utils.Const;
 using ClientService.Application.Forms.Commands.CreateForm;
 using ClientService.Application.Forms.Commands.SubmitForm;
 using ClientService.Application.Forms.Commands.UpdateFormPublishedStatus;
+using ClientService.Application.Forms.Queries.GetFieldsByFormId;
 using ClientService.Application.Forms.Queries.GetFormWithFieldsAndLogic;
 using ClientService.Application.Forms.Queries.GetForms;
+using ClientService.Application.Forms.Queries.GetPublishedFormWithFieldsAndLogic;
+using ClientService.Application.Forms.Queries.GetSubmissions;
+using ClientService.Application.Forms.Queries.GetSubmissionById;
 using ClientService.Application.Interfaces.FormServices;
 using ClientService.Domain.Entities;
+using ClientService.Domain.Entities.Enums;
 using Microsoft.EntityFrameworkCore;
 
 namespace ClientService.Infrastructure.Implements;
@@ -20,6 +25,7 @@ public class FormService : IFormService
     private readonly ICommandRepository<Form> _formRepository;
     private readonly ICommandRepository<Field> _fieldRepository;
     private readonly ICommandRepository<Logic> _logicRepository;
+    private readonly ICommandRepository<FieldOption> _fieldOptionRepository;
     private readonly ICommandRepository<Submission> _submissionRepository;
     private readonly ICommandRepository<Answer> _answerRepository;
     private readonly IUnitOfWork _unitOfWork;
@@ -32,6 +38,7 @@ public class FormService : IFormService
         ICommandRepository<Form> formRepository,
         ICommandRepository<Field> fieldRepository,
         ICommandRepository<Logic> logicRepository,
+        ICommandRepository<FieldOption> fieldOptionRepository,
         ICommandRepository<Submission> submissionRepository,
         ICommandRepository<Answer> answerRepository,
         IUnitOfWork unitOfWork,
@@ -40,6 +47,7 @@ public class FormService : IFormService
         _formRepository = formRepository;
         _fieldRepository = fieldRepository;
         _logicRepository = logicRepository;
+        _fieldOptionRepository = fieldOptionRepository;
         _submissionRepository = submissionRepository;
         _answerRepository = answerRepository;
         _unitOfWork = unitOfWork;
@@ -154,7 +162,6 @@ public class FormService : IFormService
             response.Response = forms.Select(f => new FormResponseEntity
             {
                 Id = f!.Id,
-                UserId = f.UserId,
                 Title = f.Title,
                 Slug = f.Slug,
                 ThemeConfig = f.ThemeConfig,
@@ -216,6 +223,24 @@ public class FormService : IFormService
                 .Find(l => fieldIds.Contains(l!.FieldId) && l.IsActive, cancellationToken: cancellationToken)
                 .ToListAsync(cancellationToken);
 
+            // Get all options for these fields
+            var allOptions = await _fieldOptionRepository
+                .Find(o => fieldIds.Contains(o!.FieldId) && o.IsActive, cancellationToken: cancellationToken)
+                .OrderBy(o => o!.FieldId)
+                .ThenBy(o => o!.Order)
+                .ToListAsync(cancellationToken);
+
+            // Group options by FieldId
+            var optionsByFieldId = allOptions
+                .GroupBy(o => o!.FieldId)
+                .ToDictionary(g => g.Key, g => g.Select(o => new FieldOptionResponseEntity
+                {
+                    Id = o!.Id,
+                    Label = o.Label,
+                    Value = o.Value,
+                    Order = o.Order
+                }).ToList());
+
             // Build response with fields and their logic rules
             var fieldsWithLogic = fields.Select(f =>
             {
@@ -252,7 +277,8 @@ public class FormService : IFormService
                     CreatedAt = f.CreatedAt ?? DateTime.UtcNow,
                     UpdatedAt = f.UpdatedAt,
                     LogicRules = fieldLogics,
-                    DefaultNextFieldId = nextField?.Id
+                    DefaultNextFieldId = nextField?.Id,
+                    Options = optionsByFieldId.ContainsKey(f.Id) ? optionsByFieldId[f.Id] : null
                 };
             }).ToList();
 
@@ -261,7 +287,6 @@ public class FormService : IFormService
             response.Response = new FormWithFieldsAndLogicResponseEntity
             {
                 Id = form.Id,
-                UserId = form.UserId,
                 Title = form.Title,
                 Slug = form.Slug,
                 ThemeConfig = form.ThemeConfig,
@@ -278,6 +303,124 @@ public class FormService : IFormService
         {
             response.Success = false;
             response.SetMessage(MessageId.E00000, $"An error occurred while retrieving form with fields and logic: {ex.Message}");
+            return response;
+        }
+    }
+
+    /// <summary>
+    /// Get published form with fields and logic rules (public endpoint)
+    /// </summary>
+    public async Task<GetPublishedFormWithFieldsAndLogicQueryResponse> GetPublishedFormWithFieldsAndLogicAsync(GetPublishedFormWithFieldsAndLogicQuery request, CancellationToken cancellationToken)
+    {
+        var response = new GetPublishedFormWithFieldsAndLogicQueryResponse();
+
+        try
+        {
+            // Get published form (no authentication required, public endpoint)
+            var form = await _formRepository
+                .Find(f => f!.Id == request.FormId && f.IsPublished && f.IsActive, cancellationToken: cancellationToken)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (form == null)
+            {
+                response.Success = false;
+                response.SetMessage(MessageId.E10000, "Form not found or is not published.");
+                return response;
+            }
+
+            // Get all fields for this form, ordered by Order
+            var fields = await _fieldRepository
+                .Find(f => f!.FormId == request.FormId && f.IsActive, cancellationToken: cancellationToken)
+                .OrderBy(f => f!.Order)
+                .ToListAsync(cancellationToken);
+
+            // Get all logic rules for these fields
+            var fieldIds = fields.Select(f => f!.Id).ToList();
+            var logicRules = await _logicRepository
+                .Find(l => fieldIds.Contains(l!.FieldId) && l.IsActive, cancellationToken: cancellationToken)
+                .ToListAsync(cancellationToken);
+
+            // Get all options for these fields
+            var allOptions = await _fieldOptionRepository
+                .Find(o => fieldIds.Contains(o!.FieldId) && o.IsActive, cancellationToken: cancellationToken)
+                .OrderBy(o => o!.FieldId)
+                .ThenBy(o => o!.Order)
+                .ToListAsync(cancellationToken);
+
+            // Group options by FieldId
+            var optionsByFieldId = allOptions
+                .Where(o => o != null)
+                .GroupBy(o => o!.FieldId)
+                .ToDictionary(g => g.Key, g => g.Select(o => new FieldOptionResponseEntity
+                {
+                    Id = o!.Id,
+                    Label = o.Label,
+                    Value = o.Value,
+                    Order = o.Order
+                }).ToList());
+
+            // Build response with fields and their logic rules
+            var fieldsWithLogic = fields.Select(f =>
+            {
+                var fieldLogics = logicRules
+                    .Where(l => l!.FieldId == f!.Id)
+                    .OrderBy(l => l!.Order) // Order by Order for if-else chain
+                    .Select(l => new LogicRuleResponseEntity
+                    {
+                        Id = l!.Id,
+                        FieldId = l.FieldId,
+                        Condition = l.Condition.ToString(),
+                        Value = l.Value,
+                        DestinationFieldId = l.DestinationFieldId,
+                        Order = l.Order,
+                        LogicGroupId = l.LogicGroupId,
+                        CreatedAt = l.CreatedAt ?? DateTime.UtcNow,
+                        UpdatedAt = l.UpdatedAt
+                    })
+                    .ToList();
+
+                // Calculate default next field (field with Order = current Order + 1)
+                var nextField = fields.FirstOrDefault(f2 => f2!.Order == f!.Order + 1);
+
+                return new FieldWithLogicResponseEntity
+                {
+                    Id = f!.Id,
+                    FormId = f.FormId,
+                    Title = f.Title,
+                    Description = f.Description,
+                    Type = f.Type.ToString(),
+                    Properties = f.Properties,
+                    IsRequired = f.IsRequired,
+                    Order = f.Order,
+                    CreatedAt = f.CreatedAt ?? DateTime.UtcNow,
+                    UpdatedAt = f.UpdatedAt,
+                    LogicRules = fieldLogics,
+                    DefaultNextFieldId = nextField?.Id,
+                    Options = optionsByFieldId.ContainsKey(f.Id) ? optionsByFieldId[f.Id] : null
+                };
+            }).ToList();
+
+            response.Success = true;
+            response.SetMessage(MessageId.I00001, "Published form with fields and logic retrieved successfully.");
+            response.Response = new FormWithFieldsAndLogicResponseEntity
+            {
+                Id = form.Id,
+                Title = form.Title,
+                Slug = form.Slug,
+                ThemeConfig = form.ThemeConfig,
+                Settings = form.Settings,
+                IsPublished = form.IsPublished,
+                CreatedAt = form.CreatedAt ?? DateTime.UtcNow,
+                UpdatedAt = form.UpdatedAt,
+                Fields = fieldsWithLogic
+            };
+
+            return response;
+        }
+        catch (Exception ex)
+        {
+            response.Success = false;
+            response.SetMessage(MessageId.E00000, $"An error occurred while retrieving published form: {ex.Message}");
             return response;
         }
     }
@@ -340,7 +483,8 @@ public class FormService : IFormService
             form.UpdatedAt = DateTime.UtcNow;
             form.UpdatedBy = currentUser.Email;
 
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            _formRepository.Update(form, currentUser.Email);
+            await _unitOfWork.SaveChangesAsync(currentUser.Email, cancellationToken);
 
             response.Success = true;
             response.SetMessage(MessageId.I00001, request.IsPublished ? "Form published successfully." : "Form unpublished successfully.");
@@ -388,6 +532,26 @@ public class FormService : IFormService
                 .ToListAsync(cancellationToken);
 
             var fieldIds = fields.Select(f => f!.Id).ToHashSet();
+            
+            // Get all field options for fields that have options (Select, MultiSelect, Radio)
+            var optionFieldIds = fields
+                .Where(f => f!.Type == FieldType.Select || f.Type == FieldType.MultiSelect || f.Type == FieldType.Radio)
+                .Select(f => f!.Id)
+                .ToList();
+            
+            var allOptions = new List<FieldOption>();
+            if (optionFieldIds.Any())
+            {
+                var options = await _fieldOptionRepository
+                    .Find(o => optionFieldIds.Contains(o!.FieldId) && o.IsActive, cancellationToken: cancellationToken)
+                    .ToListAsync(cancellationToken);
+                
+                allOptions = options.Where(o => o != null).Select(o => o!).ToList();
+            }
+            
+            var optionsByFieldId = allOptions
+                .GroupBy(o => o.FieldId)
+                .ToDictionary(g => g.Key, g => g.ToList());
 
             // Validate all answers belong to this form's fields
             var invalidFieldIds = request.Answers
@@ -446,12 +610,56 @@ public class FormService : IFormService
             // Create answers
             foreach (var answerDto in request.Answers)
             {
+                var field = fields.FirstOrDefault(f => f!.Id == answerDto.FieldId);
+                if (field == null) continue;
+
+                Guid? fieldOptionId = null;
+
+                // Validate and set FieldOptionId for Select/MultiSelect/Radio fields
+                if (field.Type == FieldType.Select || field.Type == FieldType.MultiSelect || field.Type == FieldType.Radio)
+                {
+                    if (answerDto.FieldOptionId.HasValue)
+                    {
+                        // Validate FieldOptionId belongs to this field
+                        if (optionsByFieldId.ContainsKey(field.Id))
+                        {
+                            var validOption = optionsByFieldId[field.Id]
+                                .FirstOrDefault(o => o!.Id == answerDto.FieldOptionId.Value);
+                            
+                            if (validOption != null)
+                            {
+                                fieldOptionId = answerDto.FieldOptionId.Value;
+                            }
+                            else
+                            {
+                                response.Success = false;
+                                response.SetMessage(MessageId.E10000, $"Invalid FieldOptionId for field '{field.Title}'.");
+                                return response;
+                            }
+                        }
+                    }
+                    // If FieldOptionId not provided, try to find by value
+                    else if (optionsByFieldId.ContainsKey(field.Id))
+                    {
+                        // Extract value from JsonDocument
+                        var valueStr = answerDto.Value.RootElement.GetRawText().Trim('"');
+                        var matchingOption = optionsByFieldId[field.Id]
+                            .FirstOrDefault(o => o!.Value == valueStr);
+                        
+                        if (matchingOption != null)
+                        {
+                            fieldOptionId = matchingOption.Id;
+                        }
+                    }
+                }
+
                 var answer = new Answer
                 {
                     Id = Guid.NewGuid(),
                     SubmissionId = submission.Id,
                     FieldId = answerDto.FieldId,
                     Value = answerDto.Value,
+                    FieldOptionId = fieldOptionId,
                     IsActive = true,
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow,
@@ -479,6 +687,214 @@ public class FormService : IFormService
         {
             response.Success = false;
             response.SetMessage(MessageId.E00000, $"An error occurred while submitting form: {ex.Message}");
+            return response;
+        }
+    }
+
+    /// <summary>
+    /// Get all submissions for a form
+    /// </summary>
+    public async Task<GetSubmissionsQueryResponse> GetSubmissionsAsync(GetSubmissionsQuery request, CancellationToken cancellationToken)
+    {
+        var response = new GetSubmissionsQueryResponse();
+
+        try
+        {
+            // Get current user from identity
+            var currentUser = _identityService.GetCurrentUser();
+            if (currentUser == null)
+            {
+                response.Success = false;
+                response.SetMessage(MessageId.E11006);
+                return response;
+            }
+
+            // Validate FormId exists and belongs to current user
+            var form = await _formRepository
+                .Find(f => f!.Id == request.FormId && f.UserId == currentUser.UserId && f.IsActive, cancellationToken: cancellationToken)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (form == null)
+            {
+                response.Success = false;
+                response.SetMessage(MessageId.E10000, "Form not found or you don't have permission to access it.");
+                return response;
+            }
+
+            // Get all submissions for this form
+            var submissions = await _submissionRepository
+                .Find(s => s!.FormId == request.FormId && s.IsActive, cancellationToken: cancellationToken)
+                .OrderByDescending(s => s!.CreatedAt)
+                .ToListAsync(cancellationToken);
+
+            // Get all answers for these submissions
+            var submissionIds = submissions.Select(s => s!.Id).ToList();
+            var allAnswers = await _answerRepository
+                .Find(a => submissionIds.Contains(a!.SubmissionId) && a.IsActive, cancellationToken: cancellationToken)
+                .ToListAsync(cancellationToken);
+
+            // Get all fields for this form
+            var fields = await _fieldRepository
+                .Find(f => f!.FormId == request.FormId && f.IsActive, cancellationToken: cancellationToken)
+                .ToListAsync(cancellationToken);
+
+            var fieldsById = fields.ToDictionary(f => f!.Id, f => f!);
+
+            // Get all field options
+            var fieldIds = fields.Select(f => f!.Id).ToList();
+            var allOptions = await _fieldOptionRepository
+                .Find(o => fieldIds.Contains(o!.FieldId) && o.IsActive, cancellationToken: cancellationToken)
+                .ToListAsync(cancellationToken);
+
+            var optionsById = allOptions.Where(o => o != null).ToDictionary(o => o!.Id, o => o!);
+
+            // Group answers by submission
+            var answersBySubmission = allAnswers
+                .Where(a => a != null)
+                .GroupBy(a => a!.SubmissionId)
+                .ToDictionary(g => g.Key, g => g.ToList());
+
+            // Build response
+            response.Success = true;
+            response.SetMessage(MessageId.I00001, "Submissions retrieved successfully.");
+            response.Response = submissions.Select(s => new SubmissionResponseEntity
+            {
+                Id = s!.Id,
+                FormId = s.FormId,
+                MetaData = s.MetaData,
+                CreatedAt = s.CreatedAt ?? DateTime.UtcNow,
+                UpdatedAt = s.UpdatedAt,
+                Answers = answersBySubmission.ContainsKey(s.Id)
+                    ? answersBySubmission[s.Id].Select(a => 
+                    {
+                        var field = fieldsById.ContainsKey(a!.FieldId) ? fieldsById[a.FieldId] : null;
+                        var option = a.FieldOptionId.HasValue && optionsById.ContainsKey(a.FieldOptionId.Value)
+                            ? optionsById[a.FieldOptionId.Value]
+                            : null;
+
+                        return new AnswerResponseEntity
+                        {
+                            Id = a.Id,
+                            FieldId = a.FieldId,
+                            FieldTitle = field?.Title ?? "Unknown Field",
+                            FieldType = field?.Type.ToString() ?? "Unknown",
+                            Value = a.Value,
+                            FieldOptionId = a.FieldOptionId,
+                            OptionLabel = option?.Label,
+                            OptionValue = option?.Value,
+                            CreatedAt = a.CreatedAt ?? DateTime.UtcNow
+                        };
+                    }).OrderBy(a => fieldsById.ContainsKey(a.FieldId) ? fieldsById[a.FieldId].Order : int.MaxValue).ToList()
+                    : new List<AnswerResponseEntity>()
+            }).ToList();
+
+            return response;
+        }
+        catch (Exception ex)
+        {
+            response.Success = false;
+            response.SetMessage(MessageId.E00000, $"An error occurred while retrieving submissions: {ex.Message}");
+            return response;
+        }
+    }
+
+    /// <summary>
+    /// Get submission by ID (public endpoint for submitter to view their submission)
+    /// </summary>
+    public async Task<GetSubmissionByIdQueryResponse> GetSubmissionByIdAsync(GetSubmissionByIdQuery request, CancellationToken cancellationToken)
+    {
+        var response = new GetSubmissionByIdQueryResponse();
+
+        try
+        {
+            // Get submission
+            var submission = await _submissionRepository
+                .Find(s => s!.Id == request.SubmissionId && s.IsActive, cancellationToken: cancellationToken)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (submission == null)
+            {
+                response.Success = false;
+                response.SetMessage(MessageId.E10000, "Submission not found.");
+                return response;
+            }
+
+            // Get form
+            var form = await _formRepository
+                .Find(f => f!.Id == submission.FormId && f.IsActive, cancellationToken: cancellationToken)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (form == null)
+            {
+                response.Success = false;
+                response.SetMessage(MessageId.E10000, "Form not found.");
+                return response;
+            }
+
+            // Get all answers for this submission
+            var answers = await _answerRepository
+                .Find(a => a!.SubmissionId == request.SubmissionId && a.IsActive, cancellationToken: cancellationToken)
+                .ToListAsync(cancellationToken);
+
+            // Get all fields for this form
+            var fields = await _fieldRepository
+                .Find(f => f!.FormId == submission.FormId && f.IsActive, cancellationToken: cancellationToken)
+                .ToListAsync(cancellationToken);
+
+            var fieldsById = fields.ToDictionary(f => f!.Id, f => f!);
+
+            // Get all field options
+            var fieldIds = fields.Select(f => f!.Id).ToList();
+            var allOptions = await _fieldOptionRepository
+                .Find(o => fieldIds.Contains(o!.FieldId) && o.IsActive, cancellationToken: cancellationToken)
+                .ToListAsync(cancellationToken);
+
+            var optionsById = allOptions.Where(o => o != null).ToDictionary(o => o!.Id, o => o!);
+
+            // Build response
+            response.Success = true;
+            response.SetMessage(MessageId.I00001, "Submission retrieved successfully.");
+            response.Response = new SubmissionDetailResponseEntity
+            {
+                Id = submission.Id,
+                FormId = submission.FormId,
+                FormTitle = form.Title,
+                MetaData = submission.MetaData,
+                CreatedAt = submission.CreatedAt ?? DateTime.UtcNow,
+                UpdatedAt = submission.UpdatedAt,
+                Answers = answers
+                    .Where(a => a != null)
+                    .Select(a =>
+                    {
+                        var field = fieldsById.ContainsKey(a!.FieldId) ? fieldsById[a.FieldId] : null;
+                        var option = a.FieldOptionId.HasValue && optionsById.ContainsKey(a.FieldOptionId.Value)
+                            ? optionsById[a.FieldOptionId.Value]
+                            : null;
+
+                        return new AnswerDetailResponseEntity
+                        {
+                            Id = a.Id,
+                            FieldId = a.FieldId,
+                            FieldTitle = field?.Title ?? "Unknown Field",
+                            FieldDescription = field?.Description ?? "",
+                            FieldType = field?.Type.ToString() ?? "Unknown",
+                            Value = a.Value,
+                            FieldOptionId = a.FieldOptionId,
+                            OptionLabel = option?.Label,
+                            OptionValue = option?.Value,
+                            CreatedAt = a.CreatedAt ?? DateTime.UtcNow
+                        };
+                    })
+                    .OrderBy(a => fieldsById.ContainsKey(a.FieldId) ? fieldsById[a.FieldId].Order : int.MaxValue)
+                    .ToList()
+            };
+
+            return response;
+        }
+        catch (Exception ex)
+        {
+            response.Success = false;
+            response.SetMessage(MessageId.E00000, $"An error occurred while retrieving submission: {ex.Message}");
             return response;
         }
     }

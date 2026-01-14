@@ -20,4 +20,13 @@ public class FieldResponseEntity
     public int Order { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
+    public List<FieldOptionResponseEntity>? Options { get; set; }
+}
+
+public class FieldOptionResponseEntity
+{
+    public Guid Id { get; set; }
+    public string Label { get; set; } = null!;
+    public string Value { get; set; } = null!;
+    public int Order { get; set; }
 }

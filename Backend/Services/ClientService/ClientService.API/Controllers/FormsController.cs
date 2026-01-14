@@ -2,12 +2,16 @@ using BaseService.API.BaseControllers;
 using BaseService.Application.Interfaces.IdentityHepers;
 using ClientService.Application.Forms.Commands.CreateField;
 using ClientService.Application.Forms.Commands.CreateForm;
+using ClientService.Application.Forms.Commands.CreateMultipleField;
 using ClientService.Application.Forms.Commands.CreateOrUpdateLogic;
 using ClientService.Application.Forms.Commands.SubmitForm;
 using ClientService.Application.Forms.Commands.UpdateFormPublishedStatus;
 using ClientService.Application.Forms.Queries.GetFieldsByFormId;
 using ClientService.Application.Forms.Queries.GetFormWithFieldsAndLogic;
 using ClientService.Application.Forms.Queries.GetForms;
+using ClientService.Application.Forms.Queries.GetPublishedFormWithFieldsAndLogic;
+using ClientService.Application.Forms.Queries.GetSubmissions;
+using ClientService.Application.Forms.Queries.GetSubmissionById;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -94,6 +98,31 @@ public class FormsController : ControllerBase
     }
 
     /// <summary>
+    /// Create multiple fields for a form at once
+    /// </summary>
+    /// <param name="request"></param>
+    /// <returns>List of created fields</returns>
+    [HttpPost("[action]")]
+    [Authorize(AuthenticationSchemes = OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme)]
+    [SwaggerOperation(
+        Summary = "Tạo nhiều field cùng lúc",
+        Description = "Tạo nhiều field cho form trong một request. Order sẽ tự động tăng dựa trên field tạo trước đó."
+    )]
+    public async Task<CreateMultipleFieldCommandResponse> CreateMultipleField([FromBody] CreateMultipleFieldCommand request)
+    {
+        return await ApiControllerHelper.HandleRequest<CreateMultipleFieldCommand, CreateMultipleFieldCommandResponse, List<CreateFieldResponseEntity>>(
+            request,
+            _logger,
+            ModelState,
+            async () => await _mediator.Send(request),
+            _identityService,
+            _identityEntity,
+            _httpContextAccessor,
+            new CreateMultipleFieldCommandResponse()
+        );
+    }
+
+    /// <summary>
     /// Get all fields by form ID
     /// </summary>
     /// <param name="formId"></param>
@@ -171,6 +200,28 @@ public class FormsController : ControllerBase
     }
 
     /// <summary>
+    /// Get published form with fields and logic rules (public endpoint)
+    /// </summary>
+    /// <param name="formId"></param>
+    /// <returns>Published form with fields and logic rules, including default next field (based on Order)</returns>
+    [HttpGet("[action]")]
+    [SwaggerOperation(
+        Summary = "Lấy form đã published kèm fields và logic rules",
+        Description = "Lấy form đã published (IsPublished = true) với tất cả fields và logic rules. Endpoint này không cần authentication, ai cũng có thể xem form đã published."
+    )]
+    public async Task<GetPublishedFormWithFieldsAndLogicQueryResponse> GetPublishedFormWithFieldsAndLogic([FromQuery] Guid formId)
+    {
+        var request = new GetPublishedFormWithFieldsAndLogicQuery { FormId = formId };
+        return await ApiControllerHelper.HandleRequest<GetPublishedFormWithFieldsAndLogicQuery, GetPublishedFormWithFieldsAndLogicQueryResponse, FormWithFieldsAndLogicResponseEntity>(
+            request,
+            _logger,
+            ModelState,
+            async () => await _mediator.Send(request),
+            new GetPublishedFormWithFieldsAndLogicQueryResponse()
+        );
+    }
+
+    /// <summary>
     /// Create or update logic rule
     /// </summary>
     /// <param name="request"></param>
@@ -238,6 +289,54 @@ public class FormsController : ControllerBase
             ModelState,
             async () => await _mediator.Send(request),
             new SubmitFormCommandResponse()
+        );
+    }
+
+    /// <summary>
+    /// Get all submissions for a form
+    /// </summary>
+    /// <param name="formId"></param>
+    /// <returns>List of submissions with answers</returns>
+    [HttpGet("[action]")]
+    [Authorize(AuthenticationSchemes = OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme)]
+    [SwaggerOperation(
+        Summary = "Lấy danh sách submissions của form",
+        Description = "Lấy tất cả submissions (câu trả lời) của form, bao gồm answers. Chỉ owner của form mới xem được."
+    )]
+    public async Task<GetSubmissionsQueryResponse> GetSubmissions([FromQuery] Guid formId)
+    {
+        var request = new GetSubmissionsQuery { FormId = formId };
+        return await ApiControllerHelper.HandleRequest<GetSubmissionsQuery, GetSubmissionsQueryResponse, List<SubmissionResponseEntity>>(
+            request,
+            _logger,
+            ModelState,
+            async () => await _mediator.Send(request),
+            _identityService,
+            _identityEntity,
+            _httpContextAccessor,
+            new GetSubmissionsQueryResponse()
+        );
+    }
+
+    /// <summary>
+    /// Get submission by ID (public endpoint for submitter to view their submission)
+    /// </summary>
+    /// <param name="submissionId"></param>
+    /// <returns>Submission details with answers</returns>
+    [HttpGet("[action]")]
+    [SwaggerOperation(
+        Summary = "Xem lại submission đã submit",
+        Description = "Người submit form có thể xem lại submission của họ bằng submissionId. Endpoint này không cần authentication."
+    )]
+    public async Task<GetSubmissionByIdQueryResponse> GetSubmissionById([FromQuery] Guid submissionId)
+    {
+        var request = new GetSubmissionByIdQuery { SubmissionId = submissionId };
+        return await ApiControllerHelper.HandleRequest<GetSubmissionByIdQuery, GetSubmissionByIdQueryResponse, SubmissionDetailResponseEntity>(
+            request,
+            _logger,
+            ModelState,
+            async () => await _mediator.Send(request),
+            new GetSubmissionByIdQueryResponse()
         );
     }
 }
