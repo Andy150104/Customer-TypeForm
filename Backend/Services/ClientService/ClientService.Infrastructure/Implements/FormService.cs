@@ -80,8 +80,8 @@ public class FormService : IFormService
                 return response;
             }
 
-            // Generate slug if not provided
-            var slug = request.Slug ?? GenerateSlug(request.Title);
+            // Generate slug automatically from title
+            var slug = GenerateSlug(request.Title);
 
             // Check if slug already exists for this user
             var existingForm = await _formRepository

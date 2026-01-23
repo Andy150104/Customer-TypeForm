@@ -5,6 +5,4 @@ namespace ClientService.Application.Forms.Commands.CreateForm;
 public class CreateFormCommand : ICommand<CreateFormCommandResponse>
 {
     public string Title { get; set; } = null!;
-
-    public string? Slug { get; set; }
 }
