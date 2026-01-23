@@ -7,6 +7,7 @@ using ClientService.Application.Forms.Commands.UpdateFormPublishedStatus;
 using ClientService.Application.Forms.Queries.GetFieldsByFormId;
 using ClientService.Application.Forms.Queries.GetFormWithFieldsAndLogic;
 using ClientService.Application.Forms.Queries.GetForms;
+using ClientService.Application.Forms.Queries.GetNextQuestion;
 using ClientService.Application.Forms.Queries.GetPublishedFormWithFieldsAndLogic;
 using ClientService.Application.Forms.Queries.GetSubmissions;
 using ClientService.Application.Forms.Queries.GetSubmissionById;
@@ -897,6 +898,180 @@ public class FormService : IFormService
             response.SetMessage(MessageId.E00000, $"An error occurred while retrieving submission: {ex.Message}");
             return response;
         }
+    }
+
+    /// <summary>
+    /// Get next question based on logic rules
+    /// </summary>
+    public async Task<GetNextQuestionQueryResponse> GetNextQuestionAsync(GetNextQuestionQuery request, CancellationToken cancellationToken)
+    {
+        var response = new GetNextQuestionQueryResponse();
+
+        try
+        {
+            // Get form (must be published)
+            var form = await _formRepository
+                .Find(f => f!.Id == request.FormId && f.IsPublished && f.IsActive, cancellationToken: cancellationToken)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (form == null)
+            {
+                response.Success = false;
+                response.SetMessage(MessageId.E10000, "Form not found or is not published.");
+                return response;
+            }
+
+            // Get current field
+            var currentField = await _fieldRepository
+                .Find(f => f!.Id == request.CurrentFieldId && f.FormId == request.FormId && f.IsActive, cancellationToken: cancellationToken)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (currentField == null)
+            {
+                response.Success = false;
+                response.SetMessage(MessageId.E10000, "Current field not found.");
+                return response;
+            }
+
+            // Get all fields ordered
+            var allFields = await _fieldRepository
+                .Find(f => f!.FormId == request.FormId && f.IsActive, cancellationToken: cancellationToken)
+                .OrderBy(f => f!.Order)
+                .ToListAsync(cancellationToken);
+
+            // Get logic rules for current field
+            var logicRules = await _logicRepository
+                .Find(l => l!.FieldId == request.CurrentFieldId && l.IsActive, cancellationToken: cancellationToken)
+                .OrderBy(l => l!.Order)
+                .ToListAsync(cancellationToken);
+
+            Guid? nextFieldId = null;
+            Guid? appliedLogicId = null;
+
+            // Evaluate logic rules
+            if (logicRules.Any() && request.CurrentValue != null)
+            {
+                var currentValue = request.CurrentValue.RootElement.ToString();
+
+                foreach (var logic in logicRules)
+                {
+                    if (logic == null) continue;
+
+                    var matches = EvaluateLogicCondition(logic.Condition, currentValue, logic.Value);
+
+                    if (matches)
+                    {
+                        nextFieldId = logic.DestinationFieldId;
+                        appliedLogicId = logic.Id;
+                        break;
+                    }
+                }
+            }
+
+            // If no logic matched, use default order
+            if (!nextFieldId.HasValue)
+            {
+                var nextField = allFields.FirstOrDefault(f => f!.Order == currentField.Order + 1);
+                nextFieldId = nextField?.Id;
+            }
+
+            // Check if end of form
+            if (!nextFieldId.HasValue)
+            {
+                response.Success = true;
+                response.SetMessage(MessageId.I00001, "End of form reached.");
+                response.Response = new NextQuestionResponseEntity
+                {
+                    NextFieldId = null,
+                    NextField = null,
+                    IsEndOfForm = true,
+                    AppliedLogicId = appliedLogicId
+                };
+                return response;
+            }
+
+            // Get next field details
+            var targetField = allFields.FirstOrDefault(f => f!.Id == nextFieldId);
+            if (targetField == null)
+            {
+                response.Success = true;
+                response.SetMessage(MessageId.I00001, "End of form reached (destination field not found).");
+                response.Response = new NextQuestionResponseEntity
+                {
+                    NextFieldId = null,
+                    NextField = null,
+                    IsEndOfForm = true,
+                    AppliedLogicId = appliedLogicId
+                };
+                return response;
+            }
+
+            // Get options for next field
+            var options = await _fieldOptionRepository
+                .Find(o => o!.FieldId == nextFieldId && o.IsActive, cancellationToken: cancellationToken)
+                .OrderBy(o => o!.Order)
+                .ToListAsync(cancellationToken);
+
+            response.Success = true;
+            response.SetMessage(MessageId.I00001, "Next question retrieved successfully.");
+            response.Response = new NextQuestionResponseEntity
+            {
+                NextFieldId = targetField.Id,
+                NextField = new FieldResponseEntity
+                {
+                    Id = targetField.Id,
+                    FormId = targetField.FormId,
+                    Title = targetField.Title,
+                    Description = targetField.Description,
+                    Type = targetField.Type.ToString(),
+                    Properties = targetField.Properties,
+                    IsRequired = targetField.IsRequired,
+                    Order = targetField.Order,
+                    CreatedAt = targetField.CreatedAt ?? DateTime.UtcNow,
+                    UpdatedAt = targetField.UpdatedAt,
+                    Options = options.Any() ? options.Select(o => new FieldOptionResponseEntity
+                    {
+                        Id = o!.Id,
+                        Label = o.Label,
+                        Value = o.Value,
+                        Order = o.Order
+                    }).ToList() : null
+                },
+                IsEndOfForm = false,
+                AppliedLogicId = appliedLogicId
+            };
+
+            return response;
+        }
+        catch (Exception ex)
+        {
+            response.Success = false;
+            response.SetMessage(MessageId.E00000, $"An error occurred: {ex.Message}");
+            return response;
+        }
+    }
+
+
+    /// <summary>
+    /// Evaluate logic condition
+    /// </summary>
+    private static bool EvaluateLogicCondition(LogicCondition condition, string? currentValue, string? logicValue)
+    {
+        if (currentValue == null) return condition == LogicCondition.Always;
+
+        return condition switch
+        {
+            LogicCondition.Is => string.Equals(currentValue, logicValue, StringComparison.OrdinalIgnoreCase),
+            LogicCondition.IsNot => !string.Equals(currentValue, logicValue, StringComparison.OrdinalIgnoreCase),
+            LogicCondition.Contains => currentValue.Contains(logicValue ?? "", StringComparison.OrdinalIgnoreCase),
+            LogicCondition.DoesNotContain => !currentValue.Contains(logicValue ?? "", StringComparison.OrdinalIgnoreCase),
+            LogicCondition.GreaterThan => double.TryParse(currentValue, out var cv1) && double.TryParse(logicValue, out var lv1) && cv1 > lv1,
+            LogicCondition.LessThan => double.TryParse(currentValue, out var cv2) && double.TryParse(logicValue, out var lv2) && cv2 < lv2,
+            LogicCondition.GreaterThanOrEqual => double.TryParse(currentValue, out var cv3) && double.TryParse(logicValue, out var lv3) && cv3 >= lv3,
+            LogicCondition.LessThanOrEqual => double.TryParse(currentValue, out var cv4) && double.TryParse(logicValue, out var lv4) && cv4 <= lv4,
+            LogicCondition.Always => true,
+            _ => false
+        };
     }
 
     /// <summary>

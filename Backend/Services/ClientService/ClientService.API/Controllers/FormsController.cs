@@ -9,6 +9,7 @@ using ClientService.Application.Forms.Commands.UpdateFormPublishedStatus;
 using ClientService.Application.Forms.Queries.GetFieldsByFormId;
 using ClientService.Application.Forms.Queries.GetFormWithFieldsAndLogic;
 using ClientService.Application.Forms.Queries.GetForms;
+using ClientService.Application.Forms.Queries.GetNextQuestion;
 using ClientService.Application.Forms.Queries.GetPublishedFormWithFieldsAndLogic;
 using ClientService.Application.Forms.Queries.GetSubmissions;
 using ClientService.Application.Forms.Queries.GetSubmissionById;
@@ -339,4 +340,26 @@ public class FormsController : ControllerBase
             new GetSubmissionByIdQueryResponse()
         );
     }
+
+    /// <summary>
+    /// Get next question based on logic rules
+    /// </summary>
+    /// <param name="request"></param>
+    /// <returns>Next field details or end of form indicator</returns>
+    [HttpPost("[action]")]
+    [SwaggerOperation(
+        Summary = "Lấy câu hỏi tiếp theo",
+        Description = "Lấy câu hỏi tiếp theo dựa trên logic rules. Nếu có logic match thì đi theo logic, không thì đi theo Order. Trả về IsEndOfForm = true nếu hết form."
+    )]
+    public async Task<GetNextQuestionQueryResponse> GetNextQuestion([FromBody] GetNextQuestionQuery request)
+    {
+        return await ApiControllerHelper.HandleRequest<GetNextQuestionQuery, GetNextQuestionQueryResponse, NextQuestionResponseEntity>(
+            request,
+            _logger,
+            ModelState,
+            async () => await _mediator.Send(request),
+            new GetNextQuestionQueryResponse()
+        );
+    }
+
 }

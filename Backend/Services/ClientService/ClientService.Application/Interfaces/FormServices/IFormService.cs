@@ -3,6 +3,7 @@ using ClientService.Application.Forms.Commands.SubmitForm;
 using ClientService.Application.Forms.Commands.UpdateFormPublishedStatus;
 using ClientService.Application.Forms.Queries.GetFormWithFieldsAndLogic;
 using ClientService.Application.Forms.Queries.GetForms;
+using ClientService.Application.Forms.Queries.GetNextQuestion;
 using ClientService.Application.Forms.Queries.GetPublishedFormWithFieldsAndLogic;
 using ClientService.Application.Forms.Queries.GetSubmissions;
 using ClientService.Application.Forms.Queries.GetSubmissionById;
@@ -75,4 +76,10 @@ public interface IFormService
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
     Task<GetSubmissionByIdQueryResponse> GetSubmissionByIdAsync(GetSubmissionByIdQuery request, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Get next question based on logic rules (public endpoint)
+    /// </summary>
+    Task<GetNextQuestionQueryResponse> GetNextQuestionAsync(GetNextQuestionQuery request, CancellationToken cancellationToken);
+
 }
