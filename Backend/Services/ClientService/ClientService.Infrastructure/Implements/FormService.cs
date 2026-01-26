@@ -13,7 +13,6 @@ using ClientService.Application.Forms.Queries.GetSubmissions;
 using ClientService.Application.Forms.Queries.GetSubmissionById;
 using ClientService.Application.Interfaces.FormServices;
 using ClientService.Domain.Entities;
-using ClientService.Domain.Entities.Enums;
 using Microsoft.EntityFrameworkCore;
 
 namespace ClientService.Infrastructure.Implements;
@@ -536,7 +535,7 @@ public class FormService : IFormService
             
             // Get all field options for fields that have options (Select, MultiSelect, Radio)
             var optionFieldIds = fields
-                .Where(f => f!.Type == FieldType.Select || f.Type == FieldType.MultiSelect || f.Type == FieldType.Radio)
+                .Where(f => f!.Type == ConstantEnum.FieldType.Select || f.Type == ConstantEnum.FieldType.MultiSelect || f.Type == ConstantEnum.FieldType.Radio)
                 .Select(f => f!.Id)
                 .ToList();
             
@@ -617,7 +616,7 @@ public class FormService : IFormService
                 Guid? fieldOptionId = null;
 
                 // Validate and set FieldOptionId for Select/MultiSelect/Radio fields
-                if (field.Type == FieldType.Select || field.Type == FieldType.MultiSelect || field.Type == FieldType.Radio)
+                if (field.Type == ConstantEnum.FieldType.Select || field.Type == ConstantEnum.FieldType.MultiSelect || field.Type == ConstantEnum.FieldType.Radio)
                 {
                     if (answerDto.FieldOptionId.HasValue)
                     {
@@ -1055,21 +1054,21 @@ public class FormService : IFormService
     /// <summary>
     /// Evaluate logic condition
     /// </summary>
-    private static bool EvaluateLogicCondition(LogicCondition condition, string? currentValue, string? logicValue)
+    private static bool EvaluateLogicCondition(ConstantEnum.LogicCondition condition, string? currentValue, string? logicValue)
     {
-        if (currentValue == null) return condition == LogicCondition.Always;
+        if (currentValue == null) return condition == ConstantEnum.LogicCondition.Always;
 
         return condition switch
         {
-            LogicCondition.Is => string.Equals(currentValue, logicValue, StringComparison.OrdinalIgnoreCase),
-            LogicCondition.IsNot => !string.Equals(currentValue, logicValue, StringComparison.OrdinalIgnoreCase),
-            LogicCondition.Contains => currentValue.Contains(logicValue ?? "", StringComparison.OrdinalIgnoreCase),
-            LogicCondition.DoesNotContain => !currentValue.Contains(logicValue ?? "", StringComparison.OrdinalIgnoreCase),
-            LogicCondition.GreaterThan => double.TryParse(currentValue, out var cv1) && double.TryParse(logicValue, out var lv1) && cv1 > lv1,
-            LogicCondition.LessThan => double.TryParse(currentValue, out var cv2) && double.TryParse(logicValue, out var lv2) && cv2 < lv2,
-            LogicCondition.GreaterThanOrEqual => double.TryParse(currentValue, out var cv3) && double.TryParse(logicValue, out var lv3) && cv3 >= lv3,
-            LogicCondition.LessThanOrEqual => double.TryParse(currentValue, out var cv4) && double.TryParse(logicValue, out var lv4) && cv4 <= lv4,
-            LogicCondition.Always => true,
+            ConstantEnum.LogicCondition.Is => string.Equals(currentValue, logicValue, StringComparison.OrdinalIgnoreCase),
+            ConstantEnum.LogicCondition.IsNot => !string.Equals(currentValue, logicValue, StringComparison.OrdinalIgnoreCase),
+            ConstantEnum.LogicCondition.Contains => currentValue.Contains(logicValue ?? "", StringComparison.OrdinalIgnoreCase),
+            ConstantEnum.LogicCondition.DoesNotContain => !currentValue.Contains(logicValue ?? "", StringComparison.OrdinalIgnoreCase),
+            ConstantEnum.LogicCondition.GreaterThan => double.TryParse(currentValue, out var cv1) && double.TryParse(logicValue, out var lv1) && cv1 > lv1,
+            ConstantEnum.LogicCondition.LessThan => double.TryParse(currentValue, out var cv2) && double.TryParse(logicValue, out var lv2) && cv2 < lv2,
+            ConstantEnum.LogicCondition.GreaterThanOrEqual => double.TryParse(currentValue, out var cv3) && double.TryParse(logicValue, out var lv3) && cv3 >= lv3,
+            ConstantEnum.LogicCondition.LessThanOrEqual => double.TryParse(currentValue, out var cv4) && double.TryParse(logicValue, out var lv4) && cv4 <= lv4,
+            ConstantEnum.LogicCondition.Always => true,
             _ => false
         };
     }

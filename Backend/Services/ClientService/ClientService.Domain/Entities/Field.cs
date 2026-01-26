@@ -1,5 +1,5 @@
 using System.Text.Json;
-using ClientService.Domain.Entities.Enums;
+using BaseService.Common.Utils.Const;
 
 namespace ClientService.Domain.Entities;
 
@@ -11,7 +11,7 @@ public class Field : BaseEntity
     
     public string? Description { get; set; }
     
-    public FieldType Type { get; set; }
+    public ConstantEnum.FieldType Type { get; set; }
     
     public JsonDocument? Properties { get; set; }
     

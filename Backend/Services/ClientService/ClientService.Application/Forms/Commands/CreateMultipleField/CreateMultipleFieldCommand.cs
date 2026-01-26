@@ -1,6 +1,6 @@
 using BuildingBlocks.CQRS;
+using BaseService.Common.Utils.Const;
 using ClientService.Application.Forms.Commands.CreateField;
-using ClientService.Domain.Entities.Enums;
 using System.Text.Json;
 
 namespace ClientService.Application.Forms.Commands.CreateMultipleField;
@@ -15,7 +15,7 @@ public class FieldDataDto
 {
     public string Title { get; set; } = null!;
     public string? Description { get; set; }
-    public FieldType Type { get; set; }
+    public ConstantEnum.FieldType Type { get; set; }
     public JsonDocument? Properties { get; set; }
     public bool IsRequired { get; set; } = false;
     public List<FieldOptionDto>? Options { get; set; }

@@ -1,4 +1,4 @@
-using ClientService.Domain.Entities.Enums;
+using BaseService.Common.Utils.Const;
 
 namespace ClientService.Domain.Entities;
 
@@ -6,7 +6,7 @@ public class Logic : BaseEntity
 {
     public Guid FieldId { get; set; }
     
-    public LogicCondition Condition { get; set; }
+    public ConstantEnum.LogicCondition Condition { get; set; }
     
     public string? Value { get; set; }
     

@@ -1,5 +1,7 @@
 using BaseService.Common.Settings;
 using ClientService.API.Extensions;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -7,6 +9,12 @@ var builder = WebApplication.CreateBuilder(args);
 EnvLoader.Load();
 
 builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        // Configure JSON serialization to use string enum converter
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+        options.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+    })
     .ConfigureApiBehaviorOptions(options =>
     {
         // Disable automatic model state validation

@@ -1,7 +1,7 @@
 using BaseService.Domain.Entities;
 using BaseService.Infrastructure.Contexts;
+using BaseService.Common.Utils.Const;
 using ClientService.Domain.Entities;
-using ClientService.Domain.Entities.Enums;
 using Microsoft.EntityFrameworkCore;
 using OpenIddict.EntityFrameworkCore.Models;
 
@@ -160,7 +160,7 @@ public class FormsDbContext : AppDbContext
                     FormId = sampleFormId,
                     Title = "Full Name",
                     Description = "Please enter your full name",
-                    Type = FieldType.Text,
+                    Type = ConstantEnum.FieldType.Text,
                     IsRequired = true,
                     Order = 1,
                     CreatedAt = seedDateTime,
@@ -175,7 +175,7 @@ public class FormsDbContext : AppDbContext
                     FormId = sampleFormId,
                     Title = "Email Address",
                     Description = "Please enter your email",
-                    Type = FieldType.Email,
+                    Type = ConstantEnum.FieldType.Email,
                     IsRequired = true,
                     Order = 2,
                     CreatedAt = seedDateTime,
@@ -247,7 +247,7 @@ public class FormsDbContext : AppDbContext
                 {
                     Id = Guid.Parse("33333333-3333-3333-3333-333333333333"),
                     FieldId = sampleFieldId1,
-                    Condition = LogicCondition.Is,
+                    Condition = ConstantEnum.LogicCondition.Is,
                     Value = "John Doe",
                     DestinationFieldId = sampleFieldId2,
                     Order = 0,
