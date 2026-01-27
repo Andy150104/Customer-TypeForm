@@ -5,9 +5,11 @@ using ClientService.Application.Forms.Commands.CreateForm;
 using ClientService.Application.Forms.Commands.CreateMultipleField;
 using ClientService.Application.Forms.Commands.CreateOrUpdateLogic;
 using ClientService.Application.Forms.Commands.DeleteField;
+using ClientService.Application.Forms.Commands.DeleteLogic;
 using ClientService.Application.Forms.Commands.DeleteForm;
 using ClientService.Application.Forms.Commands.SubmitForm;
 using ClientService.Application.Forms.Commands.UpdateField;
+using ClientService.Application.Forms.Commands.UpdateLogic;
 using ClientService.Application.Forms.Commands.UpdateForm;
 using ClientService.Application.Forms.Commands.UpdateFormPublishedStatus;
 using ClientService.Application.Forms.Commands.ReorderFields;
@@ -31,6 +33,8 @@ using UpdateFormResponseEntity = ClientService.Application.Forms.Commands.Update
 using DeleteFormResponseEntity = ClientService.Application.Forms.Commands.DeleteForm.DeleteFormResponseEntity;
 using UpdateFieldResponseEntity = ClientService.Application.Forms.Commands.UpdateField.UpdateFieldResponseEntity;
 using DeleteFieldResponseEntity = ClientService.Application.Forms.Commands.DeleteField.DeleteFieldResponseEntity;
+using UpdateLogicResponseEntity = ClientService.Application.Forms.Commands.UpdateLogic.UpdateLogicResponseEntity;
+using DeleteLogicResponseEntity = ClientService.Application.Forms.Commands.DeleteLogic.DeleteLogicResponseEntity;
 
 namespace ClientService.API.Controllers.Forms;
 
@@ -253,6 +257,58 @@ public class FormsController : ControllerBase
             _identityEntity,
             _httpContextAccessor,
             new CreateOrUpdateLogicCommandResponse()
+        );
+    }
+
+    /// <summary>
+    /// Update logic rule
+    /// </summary>
+    /// <param name="request"></param>
+    /// <returns>Logic rule details</returns>
+    [HttpPut("[action]")]
+    [Authorize(AuthenticationSchemes = OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme)]
+    [SwaggerOperation(
+        Summary = "Update logic rule",
+        Description = "Update logic rule by LogicId and FieldId."
+    )]
+    public async Task<UpdateLogicCommandResponse> UpdateLogic([FromBody] UpdateLogicCommand request)
+    {
+        return await ApiControllerHelper.HandleRequest<UpdateLogicCommand, UpdateLogicCommandResponse, UpdateLogicResponseEntity>(
+            request,
+            _logger,
+            ModelState,
+            async () => await _mediator.Send(request),
+            _identityService,
+            _identityEntity,
+            _httpContextAccessor,
+            new UpdateLogicCommandResponse()
+        );
+    }
+
+    /// <summary>
+    /// Delete logic rule (soft delete)
+    /// </summary>
+    /// <param name="fieldId"></param>
+    /// <param name="logicId"></param>
+    /// <returns>Deleted logic ID</returns>
+    [HttpDelete("[action]")]
+    [Authorize(AuthenticationSchemes = OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme)]
+    [SwaggerOperation(
+        Summary = "Delete logic rule (soft delete)",
+        Description = "Soft delete logic rule by LogicId and FieldId."
+    )]
+    public async Task<DeleteLogicCommandResponse> DeleteLogic([FromQuery] Guid fieldId, [FromQuery] Guid logicId)
+    {
+        var request = new DeleteLogicCommand { FieldId = fieldId, LogicId = logicId };
+        return await ApiControllerHelper.HandleRequest<DeleteLogicCommand, DeleteLogicCommandResponse, DeleteLogicResponseEntity>(
+            request,
+            _logger,
+            ModelState,
+            async () => await _mediator.Send(request),
+            _identityService,
+            _identityEntity,
+            _httpContextAccessor,
+            new DeleteLogicCommandResponse()
         );
     }
 

@@ -2,6 +2,8 @@ using BaseService.Application.Interfaces.IdentityHepers;
 using BaseService.Application.Interfaces.Repositories;
 using BaseService.Common.Utils.Const;
 using ClientService.Application.Forms.Commands.CreateOrUpdateLogic;
+using ClientService.Application.Forms.Commands.DeleteLogic;
+using ClientService.Application.Forms.Commands.UpdateLogic;
 using ClientService.Application.Interfaces.FormServices;
 using ClientService.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -203,6 +205,161 @@ public class LogicService : ILogicService
         {
             response.Success = false;
             response.SetMessage(MessageId.E00000, $"An error occurred while creating/updating logic: {ex.Message}");
+            return response;
+        }
+    }
+
+    /// <summary>
+    /// Update logic rule by LogicId and FieldId
+    /// </summary>
+    public async Task<UpdateLogicCommandResponse> UpdateLogicAsync(UpdateLogicCommand request, CancellationToken cancellationToken)
+    {
+        var response = new UpdateLogicCommandResponse();
+
+        try
+        {
+            // Get current user from identity
+            var currentUser = _identityService.GetCurrentUser();
+            if (currentUser == null)
+            {
+                response.Success = false;
+                response.SetMessage(MessageId.E11006);
+                return response;
+            }
+
+            // Validate FieldId exists
+            var field = await _fieldRepository
+                .Find(f => f!.Id == request.FieldId && f.IsActive, cancellationToken: cancellationToken)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (field == null)
+            {
+                response.Success = false;
+                response.SetMessage(MessageId.E10000, "Field not found.");
+                return response;
+            }
+
+            // Validate LogicId belongs to FieldId
+            var logic = await _logicRepository
+                .Find(l => l!.Id == request.LogicId && l.FieldId == request.FieldId && l.IsActive, cancellationToken: cancellationToken)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (logic == null)
+            {
+                response.Success = false;
+                response.SetMessage(MessageId.E10000, "Logic not found.");
+                return response;
+            }
+
+            // Validate DestinationFieldId if provided
+            if (request.DestinationFieldId.HasValue)
+            {
+                var destinationField = await _fieldRepository
+                    .Find(f => f!.Id == request.DestinationFieldId.Value && f.FormId == field.FormId && f.IsActive, cancellationToken: cancellationToken)
+                    .FirstOrDefaultAsync(cancellationToken);
+
+                if (destinationField == null)
+                {
+                    response.Success = false;
+                    response.SetMessage(MessageId.E10000, "Destination field not found or does not belong to the same form.");
+                    return response;
+                }
+            }
+
+            // Update logic
+            logic.Condition = request.Condition;
+            logic.Value = request.Value;
+            logic.DestinationFieldId = request.DestinationFieldId;
+            logic.UpdatedAt = DateTime.UtcNow;
+            logic.UpdatedBy = currentUser.Email;
+
+            _logicRepository.Update(logic, currentUser.Email);
+            await _unitOfWork.SaveChangesAsync(currentUser.Email, cancellationToken);
+
+            response.Success = true;
+            response.SetMessage(MessageId.I00001, "Logic updated successfully.");
+            response.Response = new UpdateLogicResponseEntity
+            {
+                Id = logic.Id,
+                FieldId = logic.FieldId,
+                Condition = logic.Condition.ToString(),
+                Value = logic.Value,
+                DestinationFieldId = logic.DestinationFieldId,
+                Order = logic.Order,
+                LogicGroupId = logic.LogicGroupId,
+                UpdatedAt = logic.UpdatedAt ?? DateTime.UtcNow
+            };
+
+            return response;
+        }
+        catch (Exception ex)
+        {
+            response.Success = false;
+            response.SetMessage(MessageId.E00000, $"An error occurred while updating logic: {ex.Message}");
+            return response;
+        }
+    }
+
+    /// <summary>
+    /// Delete logic rule by LogicId and FieldId (soft delete)
+    /// </summary>
+    public async Task<DeleteLogicCommandResponse> DeleteLogicAsync(DeleteLogicCommand request, CancellationToken cancellationToken)
+    {
+        var response = new DeleteLogicCommandResponse();
+
+        try
+        {
+            // Get current user from identity
+            var currentUser = _identityService.GetCurrentUser();
+            if (currentUser == null)
+            {
+                response.Success = false;
+                response.SetMessage(MessageId.E11006);
+                return response;
+            }
+
+            // Validate FieldId exists
+            var field = await _fieldRepository
+                .Find(f => f!.Id == request.FieldId && f.IsActive, cancellationToken: cancellationToken)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (field == null)
+            {
+                response.Success = false;
+                response.SetMessage(MessageId.E10000, "Field not found.");
+                return response;
+            }
+
+            // Validate LogicId belongs to FieldId
+            var logic = await _logicRepository
+                .Find(l => l!.Id == request.LogicId && l.FieldId == request.FieldId && l.IsActive, cancellationToken: cancellationToken)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (logic == null)
+            {
+                response.Success = false;
+                response.SetMessage(MessageId.E10000, "Logic not found.");
+                return response;
+            }
+
+            // Soft delete - set IsActive = false
+            _logicRepository.Update(logic, currentUser.Email, needLogicalDelete: true);
+            await _unitOfWork.SaveChangesAsync(currentUser.Email, cancellationToken, needLogicalDelete: true);
+
+            response.Success = true;
+            response.SetMessage(MessageId.I00001, "Logic deleted successfully.");
+            response.Response = new DeleteLogicResponseEntity
+            {
+                Id = logic.Id,
+                UpdatedAt = logic.UpdatedAt ?? DateTime.UtcNow
+            };
+
+            return response;
+        }
+        catch (Exception ex)
+        {
+            response.Success = false;
+            response.SetMessage(MessageId.E00000, $"An error occurred while deleting logic: {ex.Message}");
             return response;
         }
     }
