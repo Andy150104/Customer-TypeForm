@@ -2,7 +2,9 @@ using BaseService.Application.Interfaces.IdentityHepers;
 using BaseService.Application.Interfaces.Repositories;
 using BaseService.Common.Utils.Const;
 using ClientService.Application.Forms.Commands.CreateForm;
+using ClientService.Application.Forms.Commands.DeleteForm;
 using ClientService.Application.Forms.Commands.SubmitForm;
+using ClientService.Application.Forms.Commands.UpdateForm;
 using ClientService.Application.Forms.Commands.UpdateFormPublishedStatus;
 using ClientService.Application.Forms.Queries.GetFieldsByFormId;
 using ClientService.Application.Forms.Queries.GetFormWithFieldsAndLogic;
@@ -1092,5 +1094,120 @@ public class FormService : IFormService
         slug = slug.Trim('-');
         
         return slug;
+    }
+
+    /// <summary>
+    /// Update form
+    /// </summary>
+    public async Task<UpdateFormCommandResponse> UpdateFormAsync(UpdateFormCommand request, CancellationToken cancellationToken)
+    {
+        var response = new UpdateFormCommandResponse();
+
+        try
+        {
+            var currentUser = _identityService.GetCurrentUser();
+            if (currentUser == null)
+            {
+                response.Success = false;
+                response.SetMessage(MessageId.E11006);
+                return response;
+            }
+
+            // Validate FormId exists and belongs to current user
+            var form = await _formRepository
+                .Find(f => f!.Id == request.FormId && f.UserId == currentUser.UserId && f.IsActive, cancellationToken: cancellationToken)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (form == null)
+            {
+                response.Success = false;
+                response.SetMessage(MessageId.E10000, "Form not found or you don't have permission to access it.");
+                return response;
+            }
+
+            // Update fields if provided
+            if (!string.IsNullOrWhiteSpace(request.Title))
+            {
+                form.Title = request.Title;
+            }
+
+            form.UpdatedAt = DateTime.UtcNow;
+            form.UpdatedBy = currentUser.Email;
+
+            _formRepository.Update(form, currentUser.Email);
+            await _unitOfWork.SaveChangesAsync(currentUser.Email, cancellationToken);
+
+            response.Success = true;
+            response.SetMessage(MessageId.I00001, "Form updated successfully.");
+            response.Response = new UpdateFormResponseEntity
+            {
+                Id = form.Id,
+                Title = form.Title,
+                Slug = form.Slug,
+                ThemeConfig = form.ThemeConfig,
+                Settings = form.Settings,
+                IsPublished = form.IsPublished,
+                UpdatedAt = form.UpdatedAt ?? DateTime.UtcNow
+            };
+
+            return response;
+        }
+        catch (Exception ex)
+        {
+            response.Success = false;
+            response.SetMessage(MessageId.E00000, $"An error occurred while updating form: {ex.Message}");
+            return response;
+        }
+    }
+
+    /// <summary>
+    /// Delete form (soft delete - set IsActive = false)
+    /// </summary>
+    public async Task<DeleteFormCommandResponse> DeleteFormAsync(DeleteFormCommand request, CancellationToken cancellationToken)
+    {
+        var response = new DeleteFormCommandResponse();
+
+        try
+        {
+            var currentUser = _identityService.GetCurrentUser();
+            if (currentUser == null)
+            {
+                response.Success = false;
+                response.SetMessage(MessageId.E11006);
+                return response;
+            }
+
+            // Validate FormId exists and belongs to current user
+            var form = await _formRepository
+                .Find(f => f!.Id == request.FormId && f.UserId == currentUser.UserId && f.IsActive, cancellationToken: cancellationToken)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (form == null)
+            {
+                response.Success = false;
+                response.SetMessage(MessageId.E10000, "Form not found or you don't have permission to access it.");
+                return response;
+            }
+
+            // Soft delete - set IsActive = false
+            _formRepository.Update(form, currentUser.Email, needLogicalDelete: true);
+            await _unitOfWork.SaveChangesAsync(currentUser.Email, cancellationToken, needLogicalDelete: true);
+
+            response.Success = true;
+            response.SetMessage(MessageId.I00001, "Form deleted successfully.");
+            response.Response = new DeleteFormResponseEntity
+            {
+                Id = form.Id,
+                UpdatedAt = form.UpdatedAt ?? DateTime.UtcNow
+            };
+
+            return response;
+        }
+        catch (Exception ex)
+        {
+            response.Success = false;
+            response.SetMessage(MessageId.E00000, $"An error occurred while deleting form: {ex.Message}");
+            return response;
+        }
     }
 }

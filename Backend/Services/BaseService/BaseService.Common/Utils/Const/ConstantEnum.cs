@@ -35,7 +35,6 @@ public static class ConstantEnum
     /// <summary>
     /// Form field types
     /// </summary>
-    [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum FieldType
     {
         Text,

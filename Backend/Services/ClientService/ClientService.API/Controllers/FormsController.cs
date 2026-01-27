@@ -4,8 +4,13 @@ using ClientService.Application.Forms.Commands.CreateField;
 using ClientService.Application.Forms.Commands.CreateForm;
 using ClientService.Application.Forms.Commands.CreateMultipleField;
 using ClientService.Application.Forms.Commands.CreateOrUpdateLogic;
+using ClientService.Application.Forms.Commands.DeleteField;
+using ClientService.Application.Forms.Commands.DeleteForm;
 using ClientService.Application.Forms.Commands.SubmitForm;
+using ClientService.Application.Forms.Commands.UpdateField;
+using ClientService.Application.Forms.Commands.UpdateForm;
 using ClientService.Application.Forms.Commands.UpdateFormPublishedStatus;
+using ClientService.Application.Forms.Commands.ReorderFields;
 using ClientService.Application.Forms.Queries.GetFieldsByFormId;
 using ClientService.Application.Forms.Queries.GetFormWithFieldsAndLogic;
 using ClientService.Application.Forms.Queries.GetForms;
@@ -22,6 +27,10 @@ using Swashbuckle.AspNetCore.Annotations;
 using LogicResponseEntity = ClientService.Application.Forms.Commands.CreateOrUpdateLogic.LogicResponseEntity;
 using UpdateFormPublishedStatusResponseEntity = ClientService.Application.Forms.Commands.UpdateFormPublishedStatus.UpdateFormPublishedStatusResponseEntity;
 using SubmitFormResponseEntity = ClientService.Application.Forms.Commands.SubmitForm.SubmitFormResponseEntity;
+using UpdateFormResponseEntity = ClientService.Application.Forms.Commands.UpdateForm.UpdateFormResponseEntity;
+using DeleteFormResponseEntity = ClientService.Application.Forms.Commands.DeleteForm.DeleteFormResponseEntity;
+using UpdateFieldResponseEntity = ClientService.Application.Forms.Commands.UpdateField.UpdateFieldResponseEntity;
+using DeleteFieldResponseEntity = ClientService.Application.Forms.Commands.DeleteField.DeleteFieldResponseEntity;
 
 namespace ClientService.API.Controllers.Forms;
 
@@ -359,6 +368,133 @@ public class FormsController : ControllerBase
             ModelState,
             async () => await _mediator.Send(request),
             new GetNextQuestionQueryResponse()
+        );
+    }
+
+    /// <summary>
+    /// Update form
+    /// </summary>
+    /// <param name="request"></param>
+    /// <returns>Updated form details</returns>
+    [HttpPut("[action]")]
+    [Authorize(AuthenticationSchemes = OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme)]
+    [SwaggerOperation(
+        Summary = "Cập nhật form",
+        Description = "Cập nhật thông tin form. Chỉ cần gửi các field muốn cập nhật, các field khác sẽ giữ nguyên."
+    )]
+    public async Task<UpdateFormCommandResponse> UpdateForm([FromBody] UpdateFormCommand request)
+    {
+        return await ApiControllerHelper.HandleRequest<UpdateFormCommand, UpdateFormCommandResponse, UpdateFormResponseEntity>(
+            request,
+            _logger,
+            ModelState,
+            async () => await _mediator.Send(request),
+            _identityService,
+            _identityEntity,
+            _httpContextAccessor,
+            new UpdateFormCommandResponse()
+        );
+    }
+
+    /// <summary>
+    /// Delete form (soft delete)
+    /// </summary>
+    /// <param name="formId"></param>
+    /// <returns>Deleted form ID</returns>
+    [HttpDelete("[action]")]
+    [Authorize(AuthenticationSchemes = OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme)]
+    [SwaggerOperation(
+        Summary = "Xóa form (soft delete)",
+        Description = "Xóa mềm form bằng cách set IsActive = false. Chỉ owner của form mới có thể xóa."
+    )]
+    public async Task<DeleteFormCommandResponse> DeleteForm([FromQuery] Guid formId)
+    {
+        var request = new DeleteFormCommand { FormId = formId };
+        return await ApiControllerHelper.HandleRequest<DeleteFormCommand, DeleteFormCommandResponse, DeleteFormResponseEntity>(
+            request,
+            _logger,
+            ModelState,
+            async () => await _mediator.Send(request),
+            _identityService,
+            _identityEntity,
+            _httpContextAccessor,
+            new DeleteFormCommandResponse()
+        );
+    }
+
+    /// <summary>
+    /// Update field
+    /// </summary>
+    /// <param name="request"></param>
+    /// <returns>Updated field details</returns>
+    [HttpPut("[action]")]
+    [Authorize(AuthenticationSchemes = OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme)]
+    [SwaggerOperation(
+        Summary = "Cập nhật field",
+        Description = "Cập nhật thông tin field. Chỉ cần gửi các field muốn cập nhật, các field khác sẽ giữ nguyên. Có thể cập nhật options bằng cách gửi danh sách options mới."
+    )]
+    public async Task<UpdateFieldCommandResponse> UpdateField([FromBody] UpdateFieldCommand request)
+    {
+        return await ApiControllerHelper.HandleRequest<UpdateFieldCommand, UpdateFieldCommandResponse, UpdateFieldResponseEntity>(
+            request,
+            _logger,
+            ModelState,
+            async () => await _mediator.Send(request),
+            _identityService,
+            _identityEntity,
+            _httpContextAccessor,
+            new UpdateFieldCommandResponse()
+        );
+    }
+
+    /// <summary>
+    /// Delete field (soft delete)
+    /// </summary>
+    /// <param name="fieldId"></param>
+    /// <returns>Deleted field ID</returns>
+    [HttpDelete("[action]")]
+    [Authorize(AuthenticationSchemes = OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme)]
+    [SwaggerOperation(
+        Summary = "Xóa field (soft delete)",
+        Description = "Xóa mềm field bằng cách set IsActive = false. Chỉ owner của form mới có thể xóa field."
+    )]
+    public async Task<DeleteFieldCommandResponse> DeleteField([FromQuery] Guid fieldId)
+    {
+        var request = new DeleteFieldCommand { FieldId = fieldId };
+        return await ApiControllerHelper.HandleRequest<DeleteFieldCommand, DeleteFieldCommandResponse, DeleteFieldResponseEntity>(
+            request,
+            _logger,
+            ModelState,
+            async () => await _mediator.Send(request),
+            _identityService,
+            _identityEntity,
+            _httpContextAccessor,
+            new DeleteFieldCommandResponse()
+        );
+    }
+
+    /// <summary>
+    /// Reorder fields in a form
+    /// </summary>
+    /// <param name="request"></param>
+    /// <returns>List of fields with updated order</returns>
+    [HttpPost("[action]")]
+    [Authorize(AuthenticationSchemes = OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme)]
+    [SwaggerOperation(
+        Summary = "Cập nhật thứ tự fields trong form",
+        Description = "Gửi danh sách FieldId theo thứ tự mong muốn để cập nhật lại Order của các field trong form."
+    )]
+    public async Task<ReorderFieldsCommandResponse> ReorderFields([FromBody] ReorderFieldsCommand request)
+    {
+        return await ApiControllerHelper.HandleRequest<ReorderFieldsCommand, ReorderFieldsCommandResponse, List<FieldResponseEntity>>(
+            request,
+            _logger,
+            ModelState,
+            async () => await _mediator.Send(request),
+            _identityService,
+            _identityEntity,
+            _httpContextAccessor,
+            new ReorderFieldsCommandResponse()
         );
     }
 

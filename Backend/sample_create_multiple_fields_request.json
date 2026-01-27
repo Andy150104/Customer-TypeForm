@@ -1,0 +1,219 @@
+{
+  "formId": "05e2564b-77f4-495a-91ab-b843db239433",
+  "fields": [
+    {
+      "title": "Họ và tên",
+      "description": "Nhập họ và tên đầy đủ",
+      "type": "Text",
+      "properties": {
+        "placeholder": "Ví dụ: Nguyễn Văn A",
+        "maxLength": 100
+      },
+      "isRequired": true,
+      "options": null
+    },
+    {
+      "title": "Số năm kinh nghiệm",
+      "description": "Nhập số năm kinh nghiệm làm việc",
+      "type": "Number",
+      "properties": {
+        "min": 0,
+        "max": 50,
+        "step": 1,
+        "placeholder": "Nhập số năm"
+      },
+      "isRequired": true,
+      "options": null
+    },
+    {
+      "title": "Email liên hệ",
+      "description": "Email để nhận thông báo",
+      "type": "Email",
+      "properties": {
+        "placeholder": "example@email.com"
+      },
+      "isRequired": true,
+      "options": null
+    },
+    {
+      "title": "Số điện thoại",
+      "description": "Số điện thoại liên hệ",
+      "type": "Phone",
+      "properties": {
+        "placeholder": "0123456789"
+      },
+      "isRequired": true,
+      "options": null
+    },
+    {
+      "title": "Ngày sinh",
+      "description": "Chọn ngày sinh",
+      "type": "Date",
+      "properties": {
+        "minDate": "1900-01-01",
+        "maxDate": "2010-12-31"
+      },
+      "isRequired": true,
+      "options": null
+    },
+    {
+      "title": "Giờ bắt đầu",
+      "description": "Chọn giờ bắt đầu làm việc",
+      "type": "Time",
+      "properties": {
+        "format": "HH:mm"
+      },
+      "isRequired": false,
+      "options": null
+    },
+    {
+      "title": "Ngày giờ hẹn",
+      "description": "Chọn ngày và giờ hẹn",
+      "type": "DateTime",
+      "properties": {
+        "minDateTime": "2026-01-01T00:00:00Z",
+        "maxDateTime": "2026-12-31T23:59:59Z"
+      },
+      "isRequired": true,
+      "options": null
+    },
+    {
+      "title": "Mô tả bản thân",
+      "description": "Viết mô tả về bản thân",
+      "type": "Textarea",
+      "properties": {
+        "rows": 5,
+        "maxLength": 500,
+        "placeholder": "Viết mô tả về bản thân..."
+      },
+      "isRequired": false,
+      "options": null
+    },
+    {
+      "title": "Bạn muốn học gì?",
+      "description": "Chọn một lựa chọn",
+      "type": "Select",
+      "properties": null,
+      "isRequired": true,
+      "options": [
+        {
+          "label": "A",
+          "value": "2"
+        },
+        {
+          "label": "B",
+          "value": "3"
+        },
+        {
+          "label": "C",
+          "value": "4"
+        }
+      ]
+    },
+    {
+      "title": "Kỹ năng bạn có",
+      "description": "Chọn nhiều kỹ năng",
+      "type": "MultiSelect",
+      "properties": null,
+      "isRequired": false,
+      "options": [
+        {
+          "label": "JavaScript",
+          "value": "js"
+        },
+        {
+          "label": "Python",
+          "value": "py"
+        },
+        {
+          "label": "Java",
+          "value": "java"
+        },
+        {
+          "label": "C#",
+          "value": "csharp"
+        }
+      ]
+    },
+    {
+      "title": "Đồng ý điều khoản",
+      "description": "Xác nhận đã đọc và đồng ý",
+      "type": "Checkbox",
+      "properties": {
+        "label": "Tôi đồng ý với điều khoản sử dụng"
+      },
+      "isRequired": true,
+      "options": null
+    },
+    {
+      "title": "Giới tính",
+      "description": "Chọn giới tính",
+      "type": "Radio",
+      "properties": null,
+      "isRequired": true,
+      "options": [
+        {
+          "label": "Nam",
+          "value": "male"
+        },
+        {
+          "label": "Nữ",
+          "value": "female"
+        },
+        {
+          "label": "Khác",
+          "value": "other"
+        }
+      ]
+    },
+    {
+      "title": "Upload CV",
+      "description": "Tải lên file CV của bạn",
+      "type": "File",
+      "properties": {
+        "accept": ".pdf,.doc,.docx",
+        "maxSize": 5242880,
+        "maxFiles": 1
+      },
+      "isRequired": true,
+      "options": null
+    },
+    {
+      "title": "Đánh giá mức độ hài lòng",
+      "description": "Chọn mức độ hài lòng từ 1-5",
+      "type": "Rating",
+      "properties": {
+        "min": 1,
+        "max": 5,
+        "icon": "star"
+      },
+      "isRequired": true,
+      "options": null
+    },
+    {
+      "title": "Mức độ đồng ý",
+      "description": "Kéo thanh trượt để chọn mức độ",
+      "type": "Scale",
+      "properties": {
+        "min": 0,
+        "max": 10,
+        "step": 1,
+        "minLabel": "Hoàn toàn không đồng ý",
+        "maxLabel": "Hoàn toàn đồng ý"
+      },
+      "isRequired": true,
+      "options": null
+    },
+    {
+      "title": "Bạn có đồng ý không?",
+      "description": "Chọn có hoặc không",
+      "type": "YesNo",
+      "properties": {
+        "yesLabel": "Có",
+        "noLabel": "Không"
+      },
+      "isRequired": true,
+      "options": null
+    }
+  ]
+}

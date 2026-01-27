@@ -9,17 +9,8 @@ var builder = WebApplication.CreateBuilder(args);
 EnvLoader.Load();
 
 builder.Services.AddControllers()
-    .AddJsonOptions(options =>
-    {
-        // Configure JSON serialization to use string enum converter
-        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
-        options.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
-    })
     .ConfigureApiBehaviorOptions(options =>
     {
-        // Disable automatic model state validation
-        // Validation errors will be handled manually in ApiControllerHelper.HandleRequest
-        // This ensures consistent error response format across all endpoints
         options.SuppressModelStateInvalidFilter = true;
     });
 builder.Services

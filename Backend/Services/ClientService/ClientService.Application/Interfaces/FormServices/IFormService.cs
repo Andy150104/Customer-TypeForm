@@ -1,5 +1,7 @@
 using ClientService.Application.Forms.Commands.CreateForm;
+using ClientService.Application.Forms.Commands.DeleteForm;
 using ClientService.Application.Forms.Commands.SubmitForm;
+using ClientService.Application.Forms.Commands.UpdateForm;
 using ClientService.Application.Forms.Commands.UpdateFormPublishedStatus;
 using ClientService.Application.Forms.Queries.GetFormWithFieldsAndLogic;
 using ClientService.Application.Forms.Queries.GetForms;
@@ -81,5 +83,21 @@ public interface IFormService
     /// Get next question based on logic rules (public endpoint)
     /// </summary>
     Task<GetNextQuestionQueryResponse> GetNextQuestionAsync(GetNextQuestionQuery request, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Update form
+    /// </summary>
+    /// <param name="request"></param>
+    /// <param name="cancellationToken"></param>
+    /// <returns></returns>
+    Task<UpdateFormCommandResponse> UpdateFormAsync(UpdateFormCommand request, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Delete form (soft delete - set IsActive = false)
+    /// </summary>
+    /// <param name="request"></param>
+    /// <param name="cancellationToken"></param>
+    /// <returns></returns>
+    Task<DeleteFormCommandResponse> DeleteFormAsync(DeleteFormCommand request, CancellationToken cancellationToken);
 
 }
