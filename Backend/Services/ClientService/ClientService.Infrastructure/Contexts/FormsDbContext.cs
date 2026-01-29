@@ -132,6 +132,7 @@ public class FormsDbContext : AppDbContext
             entity.Property(e => e.FormId).HasColumnName("form_id").HasColumnType("uuid").IsRequired();
             entity.Property(e => e.Title).HasColumnName("title").HasColumnType("varchar").IsRequired();
             entity.Property(e => e.Description).HasColumnName("description").HasColumnType("varchar");
+            entity.Property(e => e.ImageUrl).HasColumnName("image_url").HasColumnType("varchar");
             entity.Property(e => e.Type).HasColumnName("type").HasConversion<string>().IsRequired();
             entity.Property(e => e.Properties).HasColumnName("properties").HasColumnType("jsonb");
             entity.Property(e => e.IsRequired).HasColumnName("is_required");

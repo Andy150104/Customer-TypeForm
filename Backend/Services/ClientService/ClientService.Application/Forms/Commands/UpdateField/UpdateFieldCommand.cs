@@ -8,6 +8,7 @@ public class UpdateFieldCommand : ICommand<UpdateFieldCommandResponse>
     public Guid FieldId { get; set; }
     public string? Title { get; set; }
     public string? Description { get; set; }
+    public string? ImageUrl { get; set; }
     public ConstantEnum.FieldType? Type { get; set; }
     public System.Text.Json.JsonDocument? Properties { get; set; }
     public bool? IsRequired { get; set; }

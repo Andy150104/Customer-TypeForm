@@ -10,6 +10,8 @@ public class Field : BaseEntity
     public string Title { get; set; } = null!;
     
     public string? Description { get; set; }
+
+    public string? ImageUrl { get; set; }
     
     public ConstantEnum.FieldType Type { get; set; }
     

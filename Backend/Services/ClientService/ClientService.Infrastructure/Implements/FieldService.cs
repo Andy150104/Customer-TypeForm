@@ -96,6 +96,7 @@ public class FieldService : IFieldService
                 FormId = request.FormId,
                 Title = request.Title,
                 Description = request.Description,
+                ImageUrl = request.ImageUrl,
                 Type = request.Type,
                 Properties = request.Properties,
                 IsRequired = request.IsRequired,
@@ -139,6 +140,7 @@ public class FieldService : IFieldService
                 FormId = field.FormId,
                 Title = field.Title,
                 Description = field.Description,
+                ImageUrl = field.ImageUrl,
                 Type = field.Type.ToString(),
                 Properties = field.Properties,
                 IsRequired = field.IsRequired,
@@ -224,6 +226,7 @@ public class FieldService : IFieldService
                     FormId = request.FormId,
                     Title = fieldData.Title,
                     Description = fieldData.Description,
+                    ImageUrl = fieldData.ImageUrl,
                     Type = fieldData.Type,
                     Properties = fieldData.Properties,
                     IsRequired = fieldData.IsRequired,
@@ -346,6 +349,7 @@ public class FieldService : IFieldService
                 FormId = f.FormId,
                 Title = f.Title,
                 Description = f.Description,
+                ImageUrl = f.ImageUrl,
                 Type = f.Type.ToString(),
                 Properties = f.Properties,
                 IsRequired = f.IsRequired,
@@ -416,6 +420,11 @@ public class FieldService : IFieldService
             if (request.Description != null)
             {
                 field.Description = request.Description;
+            }
+
+            if (request.ImageUrl != null)
+            {
+                field.ImageUrl = request.ImageUrl;
             }
 
             if (request.Type.HasValue)
@@ -526,6 +535,7 @@ public class FieldService : IFieldService
                 FormId = field.FormId,
                 Title = field.Title,
                 Description = field.Description,
+                ImageUrl = field.ImageUrl,
                 Type = field.Type.ToString(),
                 Properties = field.Properties,
                 IsRequired = field.IsRequired,
@@ -756,6 +766,7 @@ public class FieldService : IFieldService
                 FormId = f.FormId,
                 Title = f.Title,
                 Description = f.Description,
+                ImageUrl = f.ImageUrl,
                 Type = f.Type.ToString(),
                 Properties = f.Properties,
                 IsRequired = f.IsRequired,
