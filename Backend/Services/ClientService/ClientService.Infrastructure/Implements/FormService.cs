@@ -11,11 +11,13 @@ using ClientService.Application.Forms.Queries.GetFormWithFieldsAndLogic;
 using ClientService.Application.Forms.Queries.GetForms;
 using ClientService.Application.Forms.Queries.GetNextQuestion;
 using ClientService.Application.Forms.Queries.GetPublishedFormWithFieldsAndLogic;
-using ClientService.Application.Forms.Queries.GetSubmissions;
+using ClientService.Application.Forms.Queries.GetDetailSubmissions;
+using ClientService.Application.Forms.Queries.GetSubmissionsOverview;
 using ClientService.Application.Forms.Queries.GetSubmissionById;
 using ClientService.Application.Interfaces.FormServices;
 using ClientService.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace ClientService.Infrastructure.Implements;
 
@@ -696,11 +698,11 @@ public class FormService : IFormService
     }
 
     /// <summary>
-    /// Get all submissions for a form
+    /// Get all submissions for a form (detail)
     /// </summary>
-    public async Task<GetSubmissionsQueryResponse> GetSubmissionsAsync(GetSubmissionsQuery request, CancellationToken cancellationToken)
+    public async Task<GetDetailSubmissionsQueryResponse> GetDetailSubmissionsAsync(GetDetailSubmissionsQuery request, CancellationToken cancellationToken)
     {
-        var response = new GetSubmissionsQueryResponse();
+        var response = new GetDetailSubmissionsQueryResponse();
 
         try
         {
@@ -798,6 +800,167 @@ public class FormService : IFormService
         {
             response.Success = false;
             response.SetMessage(MessageId.E00000, $"An error occurred while retrieving submissions: {ex.Message}");
+            return response;
+        }
+    }
+
+    /// <summary>
+    /// Get submissions overview for a form
+    /// </summary>
+    public async Task<GetSubmissionsOverviewQueryResponse> GetSubmissionsOverviewAsync(GetSubmissionsOverviewQuery request, CancellationToken cancellationToken)
+    {
+        var response = new GetSubmissionsOverviewQueryResponse();
+
+        try
+        {
+            // Get current user from identity
+            var currentUser = _identityService.GetCurrentUser();
+            if (currentUser == null)
+            {
+                response.Success = false;
+                response.SetMessage(MessageId.E11006);
+                return response;
+            }
+
+            // Validate FormId exists and belongs to current user
+            var form = await _formRepository
+                .Find(f => f!.Id == request.FormId && f.UserId == currentUser.UserId && f.IsActive, cancellationToken: cancellationToken)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (form == null)
+            {
+                response.Success = false;
+                response.SetMessage(MessageId.E10000, "Form not found or you don't have permission to access it.");
+                return response;
+            }
+
+            // Get all fields for this form
+            var fields = await _fieldRepository
+                .Find(f => f!.FormId == request.FormId && f.IsActive, cancellationToken: cancellationToken)
+                .OrderBy(f => f!.Order)
+                .ToListAsync(cancellationToken);
+
+            // Get all submissions for this form
+            var submissions = await _submissionRepository
+                .Find(s => s!.FormId == request.FormId && s.IsActive, cancellationToken: cancellationToken)
+                .ToListAsync(cancellationToken);
+
+            var submissionIds = submissions.Select(s => s!.Id).ToList();
+            var fieldIds = fields.Select(f => f!.Id).ToList();
+
+            var answers = submissionIds.Any()
+                ? await _answerRepository
+                    .Find(a => submissionIds.Contains(a!.SubmissionId) && a.IsActive, cancellationToken: cancellationToken)
+                    .ToListAsync(cancellationToken)
+                : new List<Answer>();
+
+            var options = fieldIds.Any()
+                ? await _fieldOptionRepository
+                    .Find(o => fieldIds.Contains(o!.FieldId) && o.IsActive, cancellationToken: cancellationToken)
+                    .ToListAsync(cancellationToken)
+                : new List<FieldOption>();
+
+            var optionsByFieldId = options
+                .Where(o => o != null)
+                .GroupBy(o => o!.FieldId)
+                .ToDictionary(g => g.Key, g => g.Where(o => o != null).Select(o => o!).ToList());
+
+            var answersByFieldId = answers
+                .Where(a => a != null)
+                .GroupBy(a => a!.FieldId)
+                .ToDictionary(g => g.Key, g => g.Where(a => a != null).Select(a => a!).ToList());
+
+            var totalSubmissions = submissions.Count;
+            var fieldOverviews = new List<FieldOverviewResponseEntity>();
+
+            foreach (var field in fields)
+            {
+                var fieldAnswers = answersByFieldId.ContainsKey(field.Id) ? answersByFieldId[field.Id] : new List<Answer>();
+
+                var answeredSubmissionIds = new HashSet<Guid>();
+                foreach (var answer in fieldAnswers)
+                {
+                    if (answer == null) continue;
+                    if (answer.FieldOptionId.HasValue || !IsEmptyValue(answer.Value))
+                    {
+                        answeredSubmissionIds.Add(answer.SubmissionId);
+                    }
+                }
+
+                var answeredCount = answeredSubmissionIds.Count;
+                var emptyCount = Math.Max(totalSubmissions - answeredCount, 0);
+                var emptyRate = totalSubmissions > 0 ? (double)emptyCount / totalSubmissions * 100 : 0;
+
+                List<OptionTrendResponseEntity>? optionTrends = null;
+                List<ValueTrendResponseEntity>? topValues = null;
+
+                if (optionsByFieldId.ContainsKey(field.Id))
+                {
+                    optionTrends = BuildOptionTrends(fieldAnswers, optionsByFieldId[field.Id]);
+                }
+                else
+                {
+                    topValues = BuildTopValues(fieldAnswers, maxItems: 5);
+                }
+
+                fieldOverviews.Add(new FieldOverviewResponseEntity
+                {
+                    FieldId = field.Id,
+                    Title = field.Title,
+                    Type = field.Type.ToString(),
+                    IsRequired = field.IsRequired,
+                    AnsweredCount = answeredCount,
+                    EmptyCount = emptyCount,
+                    EmptyRate = emptyRate,
+                    AnswerCount = fieldAnswers.Count,
+                    OptionTrends = optionTrends,
+                    TopValues = topValues
+                });
+            }
+
+            FieldQualityResponseEntity? mostEmptyField = null;
+            if (fieldOverviews.Any())
+            {
+                var worst = fieldOverviews
+                    .OrderByDescending(f => f.EmptyRate)
+                    .ThenByDescending(f => f.EmptyCount)
+                    .First();
+
+                mostEmptyField = new FieldQualityResponseEntity
+                {
+                    FieldId = worst.FieldId,
+                    Title = worst.Title,
+                    Type = worst.Type,
+                    EmptyCount = worst.EmptyCount,
+                    EmptyRate = worst.EmptyRate
+                };
+            }
+
+            var totalFields = fields.Count;
+            var totalPossible = totalSubmissions * totalFields;
+            var totalAnswered = fieldOverviews.Sum(f => f.AnsweredCount);
+            var completionRate = totalPossible > 0 ? (double)totalAnswered / totalPossible * 100 : 0;
+
+            response.Success = true;
+            response.SetMessage(MessageId.I00001, "Submissions overview retrieved successfully.");
+            response.Response = new FormSubmissionsOverviewResponseEntity
+            {
+                FormId = form.Id,
+                FormTitle = form.Title,
+                TotalSubmissions = totalSubmissions,
+                TotalFields = totalFields,
+                AnsweredCount = totalAnswered,
+                CompletionRate = completionRate,
+                MostEmptyField = mostEmptyField,
+                Fields = fieldOverviews
+            };
+
+            return response;
+        }
+        catch (Exception ex)
+        {
+            response.Success = false;
+            response.SetMessage(MessageId.E00000, $"An error occurred while retrieving submissions overview: {ex.Message}");
             return response;
         }
     }
@@ -1097,6 +1260,166 @@ public class FormService : IFormService
         slug = slug.Trim('-');
         
         return slug;
+    }
+
+    private static bool IsEmptyValue(JsonDocument? value)
+    {
+        if (value == null)
+        {
+            return true;
+        }
+
+        try
+        {
+            var element = value.RootElement;
+            return element.ValueKind switch
+            {
+                JsonValueKind.Null => true,
+                JsonValueKind.Undefined => true,
+                JsonValueKind.String => string.IsNullOrWhiteSpace(element.GetString()),
+                JsonValueKind.Array => element.GetArrayLength() == 0,
+                JsonValueKind.Object => !element.EnumerateObject().Any(),
+                _ => false
+            };
+        }
+        catch
+        {
+            return true;
+        }
+    }
+
+    private static IEnumerable<string> ExtractValueStrings(JsonDocument? value)
+    {
+        if (value == null)
+        {
+            yield break;
+        }
+
+        var element = value.RootElement;
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.String:
+                {
+                    var str = element.GetString();
+                    if (!string.IsNullOrWhiteSpace(str))
+                    {
+                        yield return str;
+                    }
+                    break;
+                }
+            case JsonValueKind.Number:
+            case JsonValueKind.True:
+            case JsonValueKind.False:
+                yield return element.ToString();
+                break;
+            case JsonValueKind.Array:
+                foreach (var item in element.EnumerateArray())
+                {
+                    if (item.ValueKind == JsonValueKind.String)
+                    {
+                        var str = item.GetString();
+                        if (!string.IsNullOrWhiteSpace(str))
+                        {
+                            yield return str;
+                        }
+                    }
+                    else if (item.ValueKind == JsonValueKind.Number || item.ValueKind == JsonValueKind.True || item.ValueKind == JsonValueKind.False)
+                    {
+                        yield return item.ToString();
+                    }
+                }
+                break;
+        }
+    }
+
+    private static List<OptionTrendResponseEntity> BuildOptionTrends(IEnumerable<Answer> answers, List<FieldOption> options)
+    {
+        var optionCounts = new Dictionary<Guid, int>();
+        var optionByValue = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
+        var optionByLabel = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var option in options)
+        {
+            optionCounts[option.Id] = 0;
+            if (!string.IsNullOrWhiteSpace(option.Value) && !optionByValue.ContainsKey(option.Value))
+            {
+                optionByValue[option.Value] = option.Id;
+            }
+
+            if (!string.IsNullOrWhiteSpace(option.Label) && !optionByLabel.ContainsKey(option.Label))
+            {
+                optionByLabel[option.Label] = option.Id;
+            }
+        }
+
+        var totalSelections = 0;
+        foreach (var answer in answers)
+        {
+            if (answer == null) continue;
+
+            if (answer.FieldOptionId.HasValue && optionCounts.ContainsKey(answer.FieldOptionId.Value))
+            {
+                optionCounts[answer.FieldOptionId.Value]++;
+                totalSelections++;
+                continue;
+            }
+
+            foreach (var value in ExtractValueStrings(answer.Value))
+            {
+                if (optionByValue.TryGetValue(value, out var optionId) || optionByLabel.TryGetValue(value, out optionId))
+                {
+                    optionCounts[optionId]++;
+                    totalSelections++;
+                }
+            }
+        }
+
+        return options.Select(option =>
+        {
+            var count = optionCounts.TryGetValue(option.Id, out var c) ? c : 0;
+            var rate = totalSelections > 0 ? (double)count / totalSelections * 100 : 0;
+            return new OptionTrendResponseEntity
+            {
+                FieldOptionId = option.Id,
+                Label = option.Label,
+                Value = option.Value,
+                Count = count,
+                Rate = rate
+            };
+        }).ToList();
+    }
+
+    private static List<ValueTrendResponseEntity>? BuildTopValues(IEnumerable<Answer> answers, int maxItems)
+    {
+        var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var answer in answers)
+        {
+            if (answer == null) continue;
+            foreach (var value in ExtractValueStrings(answer.Value))
+            {
+                if (string.IsNullOrWhiteSpace(value)) continue;
+                counts[value] = counts.TryGetValue(value, out var current) ? current + 1 : 1;
+            }
+        }
+
+        if (!counts.Any())
+        {
+            return null;
+        }
+
+        var total = counts.Values.Sum();
+        return counts
+            .OrderByDescending(kv => kv.Value)
+            .ThenBy(kv => kv.Key)
+            .Take(maxItems)
+            .Select(kv => new ValueTrendResponseEntity
+            {
+                Value = kv.Key,
+                Count = kv.Value,
+                Rate = total > 0 ? (double)kv.Value / total * 100 : 0
+            })
+            .ToList();
     }
 
     /// <summary>

@@ -1,22 +1,22 @@
 using BuildingBlocks.CQRS;
 using ClientService.Application.Interfaces.FormServices;
 
-namespace ClientService.Application.Forms.Queries.GetSubmissions;
+namespace ClientService.Application.Forms.Queries.GetDetailSubmissions;
 
 /// <summary>
-/// Handler for GetSubmissionsQuery
+/// Handler for GetDetailSubmissionsQuery
 /// </summary>
 /// <param name="formService"></param>
-public class GetSubmissionsQueryHandler(IFormService formService) : IQueryHandler<GetSubmissionsQuery, GetSubmissionsQueryResponse>
+public class GetDetailSubmissionsQueryHandler(IFormService formService) : IQueryHandler<GetDetailSubmissionsQuery, GetDetailSubmissionsQueryResponse>
 {
     /// <summary>
-    /// Handle GetSubmissionsQuery
+    /// Handle GetDetailSubmissionsQuery
     /// </summary>
     /// <param name="request"></param>
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
-    public async Task<GetSubmissionsQueryResponse> Handle(GetSubmissionsQuery request, CancellationToken cancellationToken)
+    public async Task<GetDetailSubmissionsQueryResponse> Handle(GetDetailSubmissionsQuery request, CancellationToken cancellationToken)
     {
-        return await formService.GetSubmissionsAsync(request, cancellationToken);
+        return await formService.GetDetailSubmissionsAsync(request, cancellationToken);
     }
 }

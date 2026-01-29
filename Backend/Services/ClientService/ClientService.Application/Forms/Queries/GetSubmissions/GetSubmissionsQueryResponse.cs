@@ -1,9 +1,9 @@
 using BaseService.Common.ApiEntities;
 using System.Text.Json;
 
-namespace ClientService.Application.Forms.Queries.GetSubmissions;
+namespace ClientService.Application.Forms.Queries.GetDetailSubmissions;
 
-public record GetSubmissionsQueryResponse : AbstractApiResponse<List<SubmissionResponseEntity>>
+public record GetDetailSubmissionsQueryResponse : AbstractApiResponse<List<SubmissionResponseEntity>>
 {
     public override List<SubmissionResponseEntity> Response { get; set; } = new();
 }

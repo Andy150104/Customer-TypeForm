@@ -7,7 +7,8 @@ using ClientService.Application.Forms.Queries.GetFormWithFieldsAndLogic;
 using ClientService.Application.Forms.Queries.GetForms;
 using ClientService.Application.Forms.Queries.GetNextQuestion;
 using ClientService.Application.Forms.Queries.GetPublishedFormWithFieldsAndLogic;
-using ClientService.Application.Forms.Queries.GetSubmissions;
+using ClientService.Application.Forms.Queries.GetDetailSubmissions;
+using ClientService.Application.Forms.Queries.GetSubmissionsOverview;
 using ClientService.Application.Forms.Queries.GetSubmissionById;
 
 namespace ClientService.Application.Interfaces.FormServices;
@@ -64,12 +65,20 @@ public interface IFormService
     Task<SubmitFormCommandResponse> SubmitFormAsync(SubmitFormCommand request, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Get all submissions for a form
+    /// Get all submissions for a form (detail)
     /// </summary>
     /// <param name="request"></param>
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
-    Task<GetSubmissionsQueryResponse> GetSubmissionsAsync(GetSubmissionsQuery request, CancellationToken cancellationToken);
+    Task<GetDetailSubmissionsQueryResponse> GetDetailSubmissionsAsync(GetDetailSubmissionsQuery request, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Get submissions overview for a form
+    /// </summary>
+    /// <param name="request"></param>
+    /// <param name="cancellationToken"></param>
+    /// <returns></returns>
+    Task<GetSubmissionsOverviewQueryResponse> GetSubmissionsOverviewAsync(GetSubmissionsOverviewQuery request, CancellationToken cancellationToken);
 
     /// <summary>
     /// Get submission by ID (public endpoint for submitter to view their submission)

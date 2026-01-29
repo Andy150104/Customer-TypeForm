@@ -1,8 +1,8 @@
 using BuildingBlocks.CQRS;
 
-namespace ClientService.Application.Forms.Queries.GetSubmissions;
+namespace ClientService.Application.Forms.Queries.GetDetailSubmissions;
 
-public class GetSubmissionsQuery : IQuery<GetSubmissionsQueryResponse>
+public class GetDetailSubmissionsQuery : IQuery<GetDetailSubmissionsQueryResponse>
 {
     public Guid FormId { get; set; }
 }

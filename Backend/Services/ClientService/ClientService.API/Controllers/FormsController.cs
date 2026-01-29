@@ -18,7 +18,8 @@ using ClientService.Application.Forms.Queries.GetFormWithFieldsAndLogic;
 using ClientService.Application.Forms.Queries.GetForms;
 using ClientService.Application.Forms.Queries.GetNextQuestion;
 using ClientService.Application.Forms.Queries.GetPublishedFormWithFieldsAndLogic;
-using ClientService.Application.Forms.Queries.GetSubmissions;
+using ClientService.Application.Forms.Queries.GetDetailSubmissions;
+using ClientService.Application.Forms.Queries.GetSubmissionsOverview;
 using ClientService.Application.Forms.Queries.GetSubmissionById;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -359,20 +360,20 @@ public class FormsController : ControllerBase
     }
 
     /// <summary>
-    /// Get all submissions for a form
+    /// Get submissions overview for a form
     /// </summary>
     /// <param name="formId"></param>
-    /// <returns>List of submissions with answers</returns>
+    /// <returns>Overview analytics for submissions</returns>
     [HttpGet("[action]")]
     [Authorize(AuthenticationSchemes = OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme)]
     [SwaggerOperation(
-        Summary = "Lấy danh sách submissions của form",
-        Description = "Lấy tất cả submissions (câu trả lời) của form, bao gồm answers. Chỉ owner của form mới xem được."
+        Summary = "Get submissions overview",
+        Description = "Overview analytics derived from submissions (no per-answer detail). Only form owner can access."
     )]
-    public async Task<GetSubmissionsQueryResponse> GetSubmissions([FromQuery] Guid formId)
+    public async Task<GetSubmissionsOverviewQueryResponse> GetSubmissions([FromQuery] Guid formId)
     {
-        var request = new GetSubmissionsQuery { FormId = formId };
-        return await ApiControllerHelper.HandleRequest<GetSubmissionsQuery, GetSubmissionsQueryResponse, List<SubmissionResponseEntity>>(
+        var request = new GetSubmissionsOverviewQuery { FormId = formId };
+        return await ApiControllerHelper.HandleRequest<GetSubmissionsOverviewQuery, GetSubmissionsOverviewQueryResponse, FormSubmissionsOverviewResponseEntity>(
             request,
             _logger,
             ModelState,
@@ -380,7 +381,33 @@ public class FormsController : ControllerBase
             _identityService,
             _identityEntity,
             _httpContextAccessor,
-            new GetSubmissionsQueryResponse()
+            new GetSubmissionsOverviewQueryResponse()
+        );
+    }
+
+    /// <summary>
+    /// Get all submissions for a form (detail)
+    /// </summary>
+    /// <param name="formId"></param>
+    /// <returns>List of submissions with answers</returns>
+    [HttpGet("[action]")]
+    [Authorize(AuthenticationSchemes = OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme)]
+    [SwaggerOperation(
+        Summary = "Get detail submissions",
+        Description = "All submissions with answers. Only form owner can access."
+    )]
+    public async Task<GetDetailSubmissionsQueryResponse> GetDetailSubmissions([FromQuery] Guid formId)
+    {
+        var request = new GetDetailSubmissionsQuery { FormId = formId };
+        return await ApiControllerHelper.HandleRequest<GetDetailSubmissionsQuery, GetDetailSubmissionsQueryResponse, List<SubmissionResponseEntity>>(
+            request,
+            _logger,
+            ModelState,
+            async () => await _mediator.Send(request),
+            _identityService,
+            _identityEntity,
+            _httpContextAccessor,
+            new GetDetailSubmissionsQueryResponse()
         );
     }
 
