@@ -15,6 +15,7 @@ using ClientService.Application.Forms.Queries.GetDetailSubmissions;
 using ClientService.Application.Forms.Queries.GetSubmissionsOverview;
 using ClientService.Application.Forms.Queries.GetSubmissionById;
 using ClientService.Application.Interfaces.FormServices;
+using ClientService.Application.Interfaces.NotificationServices;
 using ClientService.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
@@ -34,6 +35,7 @@ public class FormService : IFormService
     private readonly ICommandRepository<Answer> _answerRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IIdentityService _identityService;
+    private readonly INotificationService _notificationService;
 
     /// <summary>
     /// Constructor
@@ -46,7 +48,8 @@ public class FormService : IFormService
         ICommandRepository<Submission> submissionRepository,
         ICommandRepository<Answer> answerRepository,
         IUnitOfWork unitOfWork,
-        IIdentityService identityService)
+        IIdentityService identityService,
+        INotificationService notificationService)
     {
         _formRepository = formRepository;
         _fieldRepository = fieldRepository;
@@ -56,6 +59,7 @@ public class FormService : IFormService
         _answerRepository = answerRepository;
         _unitOfWork = unitOfWork;
         _identityService = identityService;
+        _notificationService = notificationService;
     }
 
     /// <summary>
@@ -677,6 +681,24 @@ public class FormService : IFormService
             }
 
             await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+            try
+            {
+                await _notificationService.CreateSubmissionNotificationAsync(
+                    form.UserId,
+                    form.Id,
+                    form.Title,
+                    submission.Id,
+                    cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch
+            {
+                // Notification failures should not affect submission flow
+            }
 
             response.Success = true;
             response.SetMessage(MessageId.I00001, "Form submitted successfully.");

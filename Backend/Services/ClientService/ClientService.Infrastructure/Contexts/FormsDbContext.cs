@@ -25,11 +25,15 @@ public class FormsDbContext : AppDbContext
 
     // Forms entities
     public DbSet<Form> Forms { get; set; } = null!;
+    public DbSet<FormTemplate> FormTemplates { get; set; } = null!;
+    public DbSet<FormTemplateField> FormTemplateFields { get; set; } = null!;
+    public DbSet<FormTemplateFieldOption> FormTemplateFieldOptions { get; set; } = null!;
     public DbSet<Field> Fields { get; set; } = null!;
     public DbSet<FieldOption> FieldOptions { get; set; } = null!;
     public DbSet<Logic> Logic { get; set; } = null!;
     public DbSet<Submission> Submissions { get; set; } = null!;
     public DbSet<Answer> Answers { get; set; } = null!;
+    public DbSet<Notification> Notifications { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -121,6 +125,80 @@ public class FormsDbContext : AppDbContext
                     IsActive = true
                 }
             );
+        });
+
+        // Configure FormTemplate entity
+        modelBuilder.Entity<FormTemplate>(entity =>
+        {
+            entity.ToTable("form_templates");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("id").HasColumnType("uuid");
+            entity.Property(e => e.UserId).HasColumnName("user_id").HasColumnType("uuid").IsRequired();
+            entity.Property(e => e.Title).HasColumnName("title").HasColumnType("varchar").IsRequired();
+            entity.Property(e => e.Description).HasColumnName("description").HasColumnType("varchar");
+            entity.Property(e => e.ThemeConfig).HasColumnName("theme_config").HasColumnType("jsonb");
+            entity.Property(e => e.Settings).HasColumnName("settings").HasColumnType("jsonb");
+            entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp with time zone");
+            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamp with time zone");
+            entity.Property(e => e.CreatedBy).HasColumnName("created_by").HasColumnType("varchar");
+            entity.Property(e => e.UpdatedBy).HasColumnName("updated_by").HasColumnType("varchar");
+            entity.Property(e => e.IsActive).HasColumnName("is_active");
+
+            // Relationship: FormTemplate -> User (from BaseService)
+            entity.HasOne(t => t.User)
+                .WithMany()
+                .HasForeignKey(t => t.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // Configure FormTemplateField entity
+        modelBuilder.Entity<FormTemplateField>(entity =>
+        {
+            entity.ToTable("template_fields");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("id").HasColumnType("uuid");
+            entity.Property(e => e.TemplateId).HasColumnName("template_id").HasColumnType("uuid").IsRequired();
+            entity.Property(e => e.Title).HasColumnName("title").HasColumnType("varchar").IsRequired();
+            entity.Property(e => e.Description).HasColumnName("description").HasColumnType("varchar");
+            entity.Property(e => e.ImageUrl).HasColumnName("image_url").HasColumnType("varchar");
+            entity.Property(e => e.Type).HasColumnName("type").HasConversion<string>().IsRequired();
+            entity.Property(e => e.Properties).HasColumnName("properties").HasColumnType("jsonb");
+            entity.Property(e => e.IsRequired).HasColumnName("is_required");
+            entity.Property(e => e.Order).HasColumnName("\"order\"");
+            entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp with time zone");
+            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamp with time zone");
+            entity.Property(e => e.CreatedBy).HasColumnName("created_by").HasColumnType("varchar");
+            entity.Property(e => e.UpdatedBy).HasColumnName("updated_by").HasColumnType("varchar");
+            entity.Property(e => e.IsActive).HasColumnName("is_active");
+
+            // Relationship: FormTemplateField -> FormTemplate
+            entity.HasOne(f => f.Template)
+                .WithMany(t => t.Fields)
+                .HasForeignKey(f => f.TemplateId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Configure FormTemplateFieldOption entity
+        modelBuilder.Entity<FormTemplateFieldOption>(entity =>
+        {
+            entity.ToTable("template_field_options");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("id").HasColumnType("uuid");
+            entity.Property(e => e.TemplateFieldId).HasColumnName("template_field_id").HasColumnType("uuid").IsRequired();
+            entity.Property(e => e.Label).HasColumnName("label").HasColumnType("varchar").IsRequired();
+            entity.Property(e => e.Value).HasColumnName("value").HasColumnType("varchar").IsRequired();
+            entity.Property(e => e.Order).HasColumnName("\"order\"");
+            entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp with time zone");
+            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamp with time zone");
+            entity.Property(e => e.CreatedBy).HasColumnName("created_by").HasColumnType("varchar");
+            entity.Property(e => e.UpdatedBy).HasColumnName("updated_by").HasColumnType("varchar");
+            entity.Property(e => e.IsActive).HasColumnName("is_active");
+
+            // Relationship: FormTemplateFieldOption -> FormTemplateField
+            entity.HasOne(o => o.TemplateField)
+                .WithMany(f => f.Options)
+                .HasForeignKey(o => o.TemplateFieldId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         // Configure Field entity
@@ -336,6 +414,39 @@ public class FormsDbContext : AppDbContext
 
             // Note: Answer seed data removed because JsonDocument cannot be seeded with HasData
             // Use migration SQL or DbContext seeding at runtime instead
+        });
+
+        // Configure Notification entity
+        modelBuilder.Entity<Notification>(entity =>
+        {
+            entity.ToTable("notifications");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("id").HasColumnType("uuid");
+            entity.Property(e => e.UserId).HasColumnName("user_id").HasColumnType("uuid").IsRequired();
+            entity.Property(e => e.FormId).HasColumnName("form_id").HasColumnType("uuid").IsRequired();
+            entity.Property(e => e.LatestSubmissionId).HasColumnName("latest_submission_id").HasColumnType("uuid");
+            entity.Property(e => e.Message).HasColumnName("message").HasColumnType("varchar").IsRequired();
+            entity.Property(e => e.Count).HasColumnName("count");
+            entity.Property(e => e.FirstSubmissionAt).HasColumnName("first_submission_at").HasColumnType("timestamp with time zone");
+            entity.Property(e => e.LastSubmissionAt).HasColumnName("last_submission_at").HasColumnType("timestamp with time zone");
+            entity.Property(e => e.IsRead).HasColumnName("is_read");
+            entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp with time zone");
+            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamp with time zone");
+            entity.Property(e => e.CreatedBy).HasColumnName("created_by").HasColumnType("varchar");
+            entity.Property(e => e.UpdatedBy).HasColumnName("updated_by").HasColumnType("varchar");
+            entity.Property(e => e.IsActive).HasColumnName("is_active");
+
+            // Relationship: Notification -> User (from BaseService)
+            entity.HasOne(n => n.User)
+                .WithMany()
+                .HasForeignKey(n => n.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Relationship: Notification -> Form
+            entity.HasOne(n => n.Form)
+                .WithMany()
+                .HasForeignKey(n => n.FormId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

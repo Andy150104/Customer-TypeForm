@@ -1,0 +1,58 @@
+{
+  "title": "Customer Feedback Template",
+  "description": "Template for collecting customer feedback",
+  "themeConfig": {
+    "primaryColor": "#0F62FE",
+    "fontFamily": "Public Sans"
+  },
+  "settings": {
+    "allowMultipleSubmissions": true,
+    "showProgressBar": true
+  },
+  "fields": [
+    {
+      "title": "Full name",
+      "description": "Enter your full name",
+      "type": "Text",
+      "properties": {
+        "placeholder": "Jane Doe",
+        "maxLength": 100
+      },
+      "isRequired": true,
+      "options": null
+    },
+    {
+      "title": "Overall satisfaction",
+      "description": "Rate your experience from 1 to 5",
+      "type": "Rating",
+      "properties": {
+        "min": 1,
+        "max": 5,
+        "icon": "star"
+      },
+      "isRequired": true,
+      "options": null
+    },
+    {
+      "title": "Department",
+      "description": "Select the department you interacted with",
+      "type": "Select",
+      "properties": null,
+      "isRequired": true,
+      "options": [
+        {
+          "label": "Sales",
+          "value": "sales"
+        },
+        {
+          "label": "Support",
+          "value": "support"
+        },
+        {
+          "label": "Billing",
+          "value": "billing"
+        }
+      ]
+    }
+  ]
+}

@@ -4,6 +4,7 @@ using System.Text.Json;
 using ClientService.Infrastructure.Contexts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace ClientService.Infrastructure.Migrations
 {
     [DbContext(typeof(FormsDbContext))]
-    partial class FormsDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260129191039_AddTemplateField")]
+    partial class AddTemplateField
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -659,75 +662,6 @@ namespace ClientService.Infrastructure.Migrations
                         });
                 });
 
-            modelBuilder.Entity("ClientService.Domain.Entities.Notification", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<int>("Count")
-                        .HasColumnType("integer")
-                        .HasColumnName("count");
-
-                    b.Property<DateTime?>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<string>("CreatedBy")
-                        .HasColumnType("varchar")
-                        .HasColumnName("created_by");
-
-                    b.Property<DateTime?>("FirstSubmissionAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("first_submission_at");
-
-                    b.Property<Guid>("FormId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("form_id");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean")
-                        .HasColumnName("is_active");
-
-                    b.Property<bool>("IsRead")
-                        .HasColumnType("boolean")
-                        .HasColumnName("is_read");
-
-                    b.Property<DateTime?>("LastSubmissionAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("last_submission_at");
-
-                    b.Property<Guid?>("LatestSubmissionId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("latest_submission_id");
-
-                    b.Property<string>("Message")
-                        .IsRequired()
-                        .HasColumnType("varchar")
-                        .HasColumnName("message");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
-
-                    b.Property<string>("UpdatedBy")
-                        .HasColumnType("varchar")
-                        .HasColumnName("updated_by");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("user_id");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("FormId");
-
-                    b.HasIndex("UserId");
-
-                    b.ToTable("notifications", (string)null);
-                });
-
             modelBuilder.Entity("ClientService.Domain.Entities.Submission", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1107,25 +1041,6 @@ namespace ClientService.Infrastructure.Migrations
                     b.Navigation("DestinationField");
 
                     b.Navigation("Field");
-                });
-
-            modelBuilder.Entity("ClientService.Domain.Entities.Notification", b =>
-                {
-                    b.HasOne("ClientService.Domain.Entities.Form", "Form")
-                        .WithMany()
-                        .HasForeignKey("FormId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("BaseService.Domain.Entities.User", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Form");
-
-                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("ClientService.Domain.Entities.Submission", b =>
