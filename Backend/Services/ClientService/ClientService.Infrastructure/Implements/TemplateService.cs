@@ -5,6 +5,7 @@ using ClientService.Application.Forms.Commands.CreateFormFromTemplate;
 using ClientService.Application.Forms.Commands.CreateTemplate;
 using ClientService.Application.Forms.Commands.DeleteTemplate;
 using ClientService.Application.Forms.Commands.UpdateTemplate;
+using ClientService.Application.Forms.Commands.UpdateTemplateField;
 using ClientService.Application.Forms.Queries.GetFieldsByFormId;
 using ClientService.Application.Forms.Queries.GetTemplateWithFields;
 using ClientService.Application.Forms.Queries.GetTemplates;
@@ -168,7 +169,7 @@ public class TemplateService : ITemplateService
             response.Response = new CreateTemplateResponseEntity
             {
                 Id = template.Id,
-                UserId = template.UserId,
+                UserId = currentUser.UserId,
                 Title = template.Title,
                 Description = template.Description,
                 FieldCount = templateFields.Count,
@@ -541,16 +542,6 @@ public class TemplateService : ITemplateService
                 template.Description = request.Description;
             }
 
-            if (request.ThemeConfig != null)
-            {
-                template.ThemeConfig = request.ThemeConfig;
-            }
-
-            if (request.Settings != null)
-            {
-                template.Settings = request.Settings;
-            }
-
             template.UpdatedAt = DateTime.UtcNow;
             template.UpdatedBy = currentUser.Email;
 
@@ -648,6 +639,188 @@ public class TemplateService : ITemplateService
         {
             response.Success = false;
             response.SetMessage(MessageId.E00000, $"An error occurred while deleting template: {ex.Message}");
+            return response;
+        }
+    }
+
+    /// <summary>
+    /// Update template field
+    /// </summary>
+    public async Task<UpdateTemplateFieldCommandResponse> UpdateTemplateFieldAsync(UpdateTemplateFieldCommand request, CancellationToken cancellationToken)
+    {
+        var response = new UpdateTemplateFieldCommandResponse();
+
+        try
+        {
+            var currentUser = _identityService.GetCurrentUser();
+            if (currentUser == null)
+            {
+                response.Success = false;
+                response.SetMessage(MessageId.E11006);
+                return response;
+            }
+
+            var field = await _templateFieldRepository
+                .Find(f => f!.Id == request.TemplateFieldId && f.IsActive, cancellationToken: cancellationToken)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (field == null)
+            {
+                response.Success = false;
+                response.SetMessage(MessageId.E10000, "Template field not found.");
+                return response;
+            }
+
+            var template = await _templateRepository
+                .Find(t => t!.Id == field.TemplateId && t.UserId == currentUser.UserId && t.IsActive, cancellationToken: cancellationToken)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (template == null)
+            {
+                response.Success = false;
+                response.SetMessage(MessageId.E10000, "Template not found or you don't have permission to access it.");
+                return response;
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.Title))
+            {
+                field.Title = request.Title;
+            }
+
+            if (request.Description != null)
+            {
+                field.Description = request.Description;
+            }
+
+            if (request.ImageUrl != null)
+            {
+                field.ImageUrl = request.ImageUrl;
+            }
+
+            if (request.Type.HasValue)
+            {
+                field.Type = request.Type.Value;
+            }
+
+            if (request.Properties != null)
+            {
+                field.Properties = request.Properties;
+            }
+
+            if (request.IsRequired.HasValue)
+            {
+                field.IsRequired = request.IsRequired.Value;
+            }
+
+            field.UpdatedAt = DateTime.UtcNow;
+            field.UpdatedBy = currentUser.Email;
+
+            _templateFieldRepository.Update(field, currentUser.Email);
+
+            if (request.Options != null)
+            {
+                var existingOptions = await _templateFieldOptionRepository
+                    .Find(o => o!.TemplateFieldId == request.TemplateFieldId && o.IsActive, cancellationToken: cancellationToken)
+                    .ToListAsync(cancellationToken);
+
+                var existingOptionIds = existingOptions.Where(o => o != null).Select(o => o!.Id).ToHashSet();
+                var providedOptionIds = request.Options
+                    .Where(o => o.Id.HasValue)
+                    .Select(o => o.Id!.Value)
+                    .ToHashSet();
+
+                var optionsToDelete = existingOptions
+                    .Where(o => o != null && !providedOptionIds.Contains(o!.Id))
+                    .ToList();
+
+                foreach (var option in optionsToDelete)
+                {
+                    if (option != null)
+                    {
+                        _templateFieldOptionRepository.Update(option, currentUser.Email, needLogicalDelete: true);
+                    }
+                }
+
+                var optionsToAdd = new List<FormTemplateFieldOption>();
+                for (int i = 0; i < request.Options.Count; i++)
+                {
+                    var optionDto = request.Options[i];
+                    if (optionDto.Id.HasValue && existingOptionIds.Contains(optionDto.Id.Value))
+                    {
+                        var existingOption = existingOptions.FirstOrDefault(o => o!.Id == optionDto.Id.Value);
+                        if (existingOption != null)
+                        {
+                            existingOption.Label = optionDto.Label;
+                            existingOption.Value = optionDto.Value;
+                            existingOption.Order = i;
+                            existingOption.UpdatedAt = DateTime.UtcNow;
+                            existingOption.UpdatedBy = currentUser.Email;
+                            _templateFieldOptionRepository.Update(existingOption, currentUser.Email);
+                        }
+                    }
+                    else
+                    {
+                        var newOption = new FormTemplateFieldOption
+                        {
+                            Id = Guid.NewGuid(),
+                            TemplateFieldId = request.TemplateFieldId,
+                            Label = optionDto.Label,
+                            Value = optionDto.Value,
+                            Order = i,
+                            IsActive = true,
+                            CreatedAt = DateTime.UtcNow,
+                            UpdatedAt = DateTime.UtcNow,
+                            CreatedBy = currentUser.Email,
+                            UpdatedBy = currentUser.Email
+                        };
+                        optionsToAdd.Add(newOption);
+                    }
+                }
+
+                if (optionsToAdd.Any())
+                {
+                    await _templateFieldOptionRepository.AddRangeAsync(optionsToAdd, currentUser.Email);
+                }
+            }
+
+            await _unitOfWork.SaveChangesAsync(currentUser.Email, cancellationToken);
+
+            var updatedOptions = await _templateFieldOptionRepository
+                .Find(o => o!.TemplateFieldId == request.TemplateFieldId && o.IsActive, cancellationToken: cancellationToken)
+                .OrderBy(o => o!.Order)
+                .ToListAsync(cancellationToken);
+
+            response.Success = true;
+            response.SetMessage(MessageId.I00001, "Template field updated successfully.");
+            response.Response = new UpdateTemplateFieldResponseEntity
+            {
+                Id = field.Id,
+                TemplateId = field.TemplateId,
+                Title = field.Title,
+                Description = field.Description,
+                ImageUrl = field.ImageUrl,
+                Type = field.Type.ToString(),
+                Properties = field.Properties,
+                IsRequired = field.IsRequired,
+                Order = field.Order,
+                UpdatedAt = field.UpdatedAt ?? DateTime.UtcNow,
+                Options = updatedOptions.Any()
+                    ? updatedOptions.Select(o => new UpdateTemplateFieldOptionResponseEntity
+                    {
+                        Id = o!.Id,
+                        Label = o.Label,
+                        Value = o.Value,
+                        Order = o.Order
+                    }).ToList()
+                    : null
+            };
+
+            return response;
+        }
+        catch (Exception ex)
+        {
+            response.Success = false;
+            response.SetMessage(MessageId.E00000, $"An error occurred while updating template field: {ex.Message}");
             return response;
         }
     }

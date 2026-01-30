@@ -4,6 +4,7 @@ using ClientService.Application.Forms.Commands.CreateFormFromTemplate;
 using ClientService.Application.Forms.Commands.CreateTemplate;
 using ClientService.Application.Forms.Commands.DeleteTemplate;
 using ClientService.Application.Forms.Commands.UpdateTemplate;
+using ClientService.Application.Forms.Commands.UpdateTemplateField;
 using ClientService.Application.Forms.Queries.GetTemplateWithFields;
 using ClientService.Application.Forms.Queries.GetTemplates;
 using MediatR;
@@ -187,6 +188,31 @@ public class TemplatesController : ControllerBase
             _identityEntity,
             _httpContextAccessor,
             new DeleteTemplateCommandResponse()
+        );
+    }
+
+    /// <summary>
+    /// Update template field
+    /// </summary>
+    /// <param name="request"></param>
+    /// <returns>Updated template field details</returns>
+    [HttpPut("[action]")]
+    [Authorize(AuthenticationSchemes = OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme)]
+    [SwaggerOperation(
+        Summary = "Update template field",
+        Description = "Update template field information. Only provided fields will be updated."
+    )]
+    public async Task<UpdateTemplateFieldCommandResponse> UpdateTemplateField([FromBody] UpdateTemplateFieldCommand request)
+    {
+        return await ApiControllerHelper.HandleRequest<UpdateTemplateFieldCommand, UpdateTemplateFieldCommandResponse, UpdateTemplateFieldResponseEntity>(
+            request,
+            _logger,
+            ModelState,
+            async () => await _mediator.Send(request),
+            _identityService,
+            _identityEntity,
+            _httpContextAccessor,
+            new UpdateTemplateFieldCommandResponse()
         );
     }
 }

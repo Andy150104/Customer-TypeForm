@@ -2,6 +2,7 @@ using ClientService.Application.Forms.Commands.CreateFormFromTemplate;
 using ClientService.Application.Forms.Commands.CreateTemplate;
 using ClientService.Application.Forms.Commands.DeleteTemplate;
 using ClientService.Application.Forms.Commands.UpdateTemplate;
+using ClientService.Application.Forms.Commands.UpdateTemplateField;
 using ClientService.Application.Forms.Queries.GetTemplateWithFields;
 using ClientService.Application.Forms.Queries.GetTemplates;
 
@@ -38,4 +39,9 @@ public interface ITemplateService
     /// Delete template (soft delete)
     /// </summary>
     Task<DeleteTemplateCommandResponse> DeleteTemplateAsync(DeleteTemplateCommand request, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Update template field
+    /// </summary>
+    Task<UpdateTemplateFieldCommandResponse> UpdateTemplateFieldAsync(UpdateTemplateFieldCommand request, CancellationToken cancellationToken);
 }
