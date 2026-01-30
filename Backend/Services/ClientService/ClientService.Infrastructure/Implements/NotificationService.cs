@@ -15,7 +15,7 @@ namespace ClientService.Infrastructure.Implements;
 /// </summary>
 public class NotificationService : INotificationService
 {
-    private static readonly TimeSpan AggregateWindow = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan AggregateWindow = TimeSpan.FromSeconds(15);
     private const string SystemUser = "System";
     private static readonly ConcurrentDictionary<string, DebouncedNotificationState> PendingNotifications = new();
 
