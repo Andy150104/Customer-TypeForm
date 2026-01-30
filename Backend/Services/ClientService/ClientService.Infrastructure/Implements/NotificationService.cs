@@ -4,6 +4,7 @@ using BaseService.Application.Interfaces.Repositories;
 using BaseService.Common.Utils.Const;
 using ClientService.Application.Interfaces.NotificationServices;
 using ClientService.Application.Notifications;
+using ClientService.Application.Notifications.Commands.ReadNotifications;
 using ClientService.Application.Notifications.Queries.GetNotifications;
 using ClientService.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -150,6 +151,93 @@ public class NotificationService : INotificationService
         {
             response.Success = false;
             response.SetMessage(MessageId.E00000, $"An error occurred while retrieving notifications: {ex.Message}");
+            return response;
+        }
+    }
+
+    /// <summary>
+    /// Mark notifications as read for current user
+    /// </summary>
+    public async Task<ReadNotificationsCommandResponse> ReadNotificationsAsync(ReadNotificationsCommand request, CancellationToken cancellationToken)
+    {
+        var response = new ReadNotificationsCommandResponse();
+
+        try
+        {
+            var currentUser = _identityService.GetCurrentUser();
+            if (currentUser == null)
+            {
+                response.Success = false;
+                response.SetMessage(MessageId.E11006);
+                return response;
+            }
+
+            if (request.NotificationIds == null || request.NotificationIds.Count == 0)
+            {
+                response.Success = false;
+                response.SetMessage(MessageId.E10000, "NotificationIds is required.");
+                return response;
+            }
+
+            var ids = request.NotificationIds
+                .Where(id => id != Guid.Empty)
+                .Distinct()
+                .ToList();
+
+            if (ids.Count == 0)
+            {
+                response.Success = false;
+                response.SetMessage(MessageId.E10000, "NotificationIds is required.");
+                return response;
+            }
+
+            var notifications = await _notificationRepository
+                .Find(n => n!.UserId == currentUser.UserId && n.IsActive && ids.Contains(n.Id), cancellationToken: cancellationToken)
+                .ToListAsync(cancellationToken);
+
+            if (!notifications.Any())
+            {
+                response.Success = false;
+                response.SetMessage(MessageId.E10000, "No notifications found to update.");
+                return response;
+            }
+
+            var now = DateTime.UtcNow;
+            var updatedIds = new List<Guid>();
+            var hasChanges = false;
+
+            foreach (var notification in notifications)
+            {
+                if (notification == null) continue;
+
+                updatedIds.Add(notification.Id);
+
+                if (notification.IsRead)
+                {
+                    continue;
+                }
+
+                notification.IsRead = true;
+                notification.UpdatedAt = now;
+                notification.UpdatedBy = currentUser.Email;
+                _notificationRepository.Update(notification, currentUser.Email);
+                hasChanges = true;
+            }
+
+            if (hasChanges)
+            {
+                await _unitOfWork.SaveChangesAsync(currentUser.Email, cancellationToken);
+            }
+
+            response.Success = true;
+            response.SetMessage(MessageId.I00001, "Notifications updated successfully.");
+            response.Response = updatedIds;
+            return response;
+        }
+        catch (Exception ex)
+        {
+            response.Success = false;
+            response.SetMessage(MessageId.E00000, $"An error occurred while updating notifications: {ex.Message}");
             return response;
         }
     }

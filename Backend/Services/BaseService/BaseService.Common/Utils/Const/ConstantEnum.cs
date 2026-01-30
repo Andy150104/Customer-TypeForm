@@ -47,9 +47,7 @@ public static class ConstantEnum
         Textarea,
         Select,
         MultiSelect,
-        Checkbox,
         Radio,
-        File,
         Rating,
         Scale,
         YesNo

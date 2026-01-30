@@ -18,6 +18,7 @@ using ClientService.Application.Interfaces.FormServices;
 using ClientService.Application.Interfaces.NotificationServices;
 using ClientService.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
+using System.Globalization;
 using System.Text.Json;
 
 namespace ClientService.Infrastructure.Implements;
@@ -541,10 +542,21 @@ public class FormService : IFormService
                 .Find(f => f!.FormId == request.FormId && f.IsActive, cancellationToken: cancellationToken)
                 .ToListAsync(cancellationToken);
 
-            var fieldIds = fields.Select(f => f!.Id).ToHashSet();
+            var orderedFields = fields
+                .Where(f => f != null)
+                .OrderBy(f => f!.Order)
+                .Select(f => f!)
+                .ToList();
+
+            var fieldsById = orderedFields.ToDictionary(f => f.Id, f => f);
+            var fieldIds = fieldsById.Keys.ToHashSet();
+
+            var answersByFieldId = request.Answers
+                .GroupBy(a => a.FieldId)
+                .ToDictionary(g => g.Key, g => g.ToList());
             
             // Get all field options for fields that have options (Select, MultiSelect, Radio)
-            var optionFieldIds = fields
+            var optionFieldIds = orderedFields
                 .Where(f => f!.Type == ConstantEnum.FieldType.Select || f.Type == ConstantEnum.FieldType.MultiSelect || f.Type == ConstantEnum.FieldType.Radio)
                 .Select(f => f!.Id)
                 .ToList();
@@ -563,6 +575,36 @@ public class FormService : IFormService
                 .GroupBy(o => o.FieldId)
                 .ToDictionary(g => g.Key, g => g.ToList());
 
+            // Get all logic rules for fields in this form
+            var logicRules = await _logicRepository
+                .Find(l => fieldIds.Contains(l!.FieldId) && l.IsActive, cancellationToken: cancellationToken)
+                .OrderBy(l => l!.Order)
+                .ToListAsync(cancellationToken);
+
+            var logicsByFieldId = logicRules
+                .Where(l => l != null)
+                .GroupBy(l => l!.FieldId)
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.Where(l => l != null).OrderBy(l => l!.Order).Select(l => l!).ToList());
+
+            var defaultNextByFieldId = BuildDefaultNextByOrder(orderedFields);
+            var logicPathFieldIds = BuildLogicPathFieldIds(
+                orderedFields,
+                fieldsById,
+                defaultNextByFieldId,
+                logicsByFieldId,
+                optionsByFieldId,
+                answersByFieldId,
+                out var logicPathError);
+
+            if (logicPathError != null)
+            {
+                response.Success = false;
+                response.SetMessage(MessageId.E10000, logicPathError);
+                return response;
+            }
+
             // Validate all answers belong to this form's fields
             var invalidFieldIds = request.Answers
                 .Where(a => !fieldIds.Contains(a.FieldId))
@@ -577,14 +619,12 @@ public class FormService : IFormService
             }
 
             // Validate required fields are answered
-            var requiredFieldIds = fields
-                .Where(f => f!.IsRequired)
+            var requiredFieldIds = orderedFields
+                .Where(f => f!.IsRequired && logicPathFieldIds.Contains(f.Id))
                 .Select(f => f!.Id)
                 .ToHashSet();
 
-            var answeredFieldIds = request.Answers
-                .Select(a => a.FieldId)
-                .ToHashSet();
+            var answeredFieldIds = answersByFieldId.Keys.ToHashSet();
 
             var missingRequiredFields = requiredFieldIds
                 .Where(fid => !answeredFieldIds.Contains(fid))
@@ -592,7 +632,7 @@ public class FormService : IFormService
 
             if (missingRequiredFields.Any())
             {
-                var missingFieldTitles = fields
+                var missingFieldTitles = orderedFields
                     .Where(f => missingRequiredFields.Contains(f!.Id))
                     .Select(f => f!.Title)
                     .ToList();
@@ -620,8 +660,10 @@ public class FormService : IFormService
             // Create answers
             foreach (var answerDto in request.Answers)
             {
-                var field = fields.FirstOrDefault(f => f!.Id == answerDto.FieldId);
-                if (field == null) continue;
+                if (!fieldsById.TryGetValue(answerDto.FieldId, out var field))
+                {
+                    continue;
+                }
 
                 Guid? fieldOptionId = null;
 
@@ -1137,21 +1179,23 @@ public class FormService : IFormService
             Guid? appliedLogicId = null;
 
             // Evaluate logic rules
-            if (logicRules.Any() && request.CurrentValue != null)
+            if (logicRules.Any() && !IsEmptyValue(request.CurrentValue))
             {
-                var currentValue = request.CurrentValue.RootElement.ToString();
-
-                foreach (var logic in logicRules)
+                var currentValues = CollectAnswerValues(request.CurrentValue);
+                if (currentValues.Count > 0)
                 {
-                    if (logic == null) continue;
-
-                    var matches = EvaluateLogicCondition(logic.Condition, currentValue, logic.Value);
-
-                    if (matches)
+                    foreach (var logic in logicRules)
                     {
-                        nextFieldId = logic.DestinationFieldId;
-                        appliedLogicId = logic.Id;
-                        break;
+                        if (logic == null) continue;
+
+                        var matches = EvaluateLogicCondition(currentField.Type, logic.Condition, currentValues, logic.Value);
+
+                        if (matches)
+                        {
+                            nextFieldId = logic.DestinationFieldId;
+                            appliedLogicId = logic.Id;
+                            break;
+                        }
                     }
                 }
             }
@@ -1159,8 +1203,11 @@ public class FormService : IFormService
             // If no logic matched, use default order
             if (!nextFieldId.HasValue)
             {
-                var nextField = allFields.FirstOrDefault(f => f!.Order == currentField.Order + 1);
-                nextFieldId = nextField?.Id;
+                var currentIndex = allFields.FindIndex(f => f!.Id == currentField.Id);
+                if (currentIndex >= 0 && currentIndex + 1 < allFields.Count)
+                {
+                    nextFieldId = allFields[currentIndex + 1]!.Id;
+                }
             }
 
             // Check if end of form
@@ -1242,25 +1289,414 @@ public class FormService : IFormService
 
 
     /// <summary>
-    /// Evaluate logic condition
+    /// Build default next-field lookup based on order
     /// </summary>
-    private static bool EvaluateLogicCondition(ConstantEnum.LogicCondition condition, string? currentValue, string? logicValue)
+    private static Dictionary<Guid, Guid?> BuildDefaultNextByOrder(List<Field> orderedFields)
     {
-        if (currentValue == null) return condition == ConstantEnum.LogicCondition.Always;
-
-        return condition switch
+        var nextByFieldId = new Dictionary<Guid, Guid?>();
+        for (var i = 0; i < orderedFields.Count; i++)
         {
-            ConstantEnum.LogicCondition.Is => string.Equals(currentValue, logicValue, StringComparison.OrdinalIgnoreCase),
-            ConstantEnum.LogicCondition.IsNot => !string.Equals(currentValue, logicValue, StringComparison.OrdinalIgnoreCase),
-            ConstantEnum.LogicCondition.Contains => currentValue.Contains(logicValue ?? "", StringComparison.OrdinalIgnoreCase),
-            ConstantEnum.LogicCondition.DoesNotContain => !currentValue.Contains(logicValue ?? "", StringComparison.OrdinalIgnoreCase),
-            ConstantEnum.LogicCondition.GreaterThan => double.TryParse(currentValue, out var cv1) && double.TryParse(logicValue, out var lv1) && cv1 > lv1,
-            ConstantEnum.LogicCondition.LessThan => double.TryParse(currentValue, out var cv2) && double.TryParse(logicValue, out var lv2) && cv2 < lv2,
-            ConstantEnum.LogicCondition.GreaterThanOrEqual => double.TryParse(currentValue, out var cv3) && double.TryParse(logicValue, out var lv3) && cv3 >= lv3,
-            ConstantEnum.LogicCondition.LessThanOrEqual => double.TryParse(currentValue, out var cv4) && double.TryParse(logicValue, out var lv4) && cv4 <= lv4,
-            ConstantEnum.LogicCondition.Always => true,
-            _ => false
+            var nextId = i + 1 < orderedFields.Count ? orderedFields[i + 1].Id : (Guid?)null;
+            nextByFieldId[orderedFields[i].Id] = nextId;
+        }
+
+        return nextByFieldId;
+    }
+
+    /// <summary>
+    /// Build the field path based on submitted answers and logic rules
+    /// </summary>
+    private static HashSet<Guid> BuildLogicPathFieldIds(
+        List<Field> orderedFields,
+        IReadOnlyDictionary<Guid, Field> fieldsById,
+        IReadOnlyDictionary<Guid, Guid?> defaultNextByFieldId,
+        IReadOnlyDictionary<Guid, List<Logic>> logicsByFieldId,
+        IReadOnlyDictionary<Guid, List<FieldOption>> optionsByFieldId,
+        IReadOnlyDictionary<Guid, List<AnswerDto>> answersByFieldId,
+        out string? errorMessage)
+    {
+        errorMessage = null;
+        var path = new HashSet<Guid>();
+
+        if (orderedFields.Count == 0)
+        {
+            return path;
+        }
+
+        Guid? currentFieldId = orderedFields[0].Id;
+        var guard = 0;
+
+        while (currentFieldId.HasValue)
+        {
+            if (!path.Add(currentFieldId.Value))
+            {
+                errorMessage = "Form logic is invalid (loop detected).";
+                break;
+            }
+
+            if (!fieldsById.TryGetValue(currentFieldId.Value, out var currentField))
+            {
+                break;
+            }
+
+            Guid? nextFieldId = null;
+
+            if (logicsByFieldId.TryGetValue(currentFieldId.Value, out var logics)
+                && answersByFieldId.TryGetValue(currentFieldId.Value, out var currentAnswers)
+                && HasAnswerValue(currentAnswers))
+            {
+                var currentValues = CollectAnswerValues(
+                    currentAnswers,
+                    optionsByFieldId.TryGetValue(currentFieldId.Value, out var options) ? options : null);
+
+                foreach (var logic in logics)
+                {
+                    if (logic == null) continue;
+
+                    if (EvaluateLogicCondition(currentField.Type, logic.Condition, currentValues, logic.Value))
+                    {
+                        nextFieldId = logic.DestinationFieldId;
+                        break;
+                    }
+                }
+            }
+
+            if (!nextFieldId.HasValue && defaultNextByFieldId.TryGetValue(currentFieldId.Value, out var defaultNext))
+            {
+                nextFieldId = defaultNext;
+            }
+
+            if (!nextFieldId.HasValue)
+            {
+                break;
+            }
+
+            if (!fieldsById.ContainsKey(nextFieldId.Value))
+            {
+                break;
+            }
+
+            currentFieldId = nextFieldId;
+            guard++;
+
+            if (guard > orderedFields.Count + 5)
+            {
+                errorMessage = "Form logic is invalid (path exceeds field count).";
+                break;
+            }
+        }
+
+        return path;
+    }
+
+    private static bool HasAnswerValue(IReadOnlyList<AnswerDto> answers)
+    {
+        return answers.Any(a => a.FieldOptionId.HasValue || !IsEmptyValue(a.Value));
+    }
+
+    private static List<string> CollectAnswerValues(JsonDocument? value)
+    {
+        var values = new List<string>();
+        foreach (var item in ExtractValueStrings(value))
+        {
+            var normalized = NormalizeValue(item);
+            if (!string.IsNullOrWhiteSpace(normalized))
+            {
+                values.Add(normalized);
+            }
+        }
+
+        return values;
+    }
+
+    private static List<string> CollectAnswerValues(IEnumerable<AnswerDto> answers, IReadOnlyList<FieldOption>? fieldOptions)
+    {
+        var values = new List<string>();
+
+        foreach (var answer in answers)
+        {
+            foreach (var item in ExtractValueStrings(answer.Value))
+            {
+                var normalized = NormalizeValue(item);
+                if (!string.IsNullOrWhiteSpace(normalized))
+                {
+                    values.Add(normalized);
+                }
+            }
+
+            if (answer.FieldOptionId.HasValue && fieldOptions != null)
+            {
+                var option = fieldOptions.FirstOrDefault(o => o!.Id == answer.FieldOptionId.Value);
+                if (option != null)
+                {
+                    var optionValue = NormalizeValue(option.Value ?? string.Empty);
+                    if (!string.IsNullOrWhiteSpace(optionValue))
+                    {
+                        values.Add(optionValue);
+                    }
+
+                    var optionLabel = NormalizeValue(option.Label ?? string.Empty);
+                    if (!string.IsNullOrWhiteSpace(optionLabel))
+                    {
+                        values.Add(optionLabel);
+                    }
+                }
+            }
+        }
+
+        return values;
+    }
+
+    private static string NormalizeValue(string value)
+    {
+        var trimmed = value.Trim();
+        if (trimmed.Length >= 2 && trimmed.StartsWith("\"", StringComparison.Ordinal) && trimmed.EndsWith("\"", StringComparison.Ordinal))
+        {
+            return trimmed[1..^1].Trim();
+        }
+
+        return trimmed;
+    }
+
+    private static bool IsLogicConditionAllowed(ConstantEnum.FieldType fieldType, ConstantEnum.LogicCondition condition)
+    {
+        return fieldType switch
+        {
+            ConstantEnum.FieldType.Number or ConstantEnum.FieldType.Rating or ConstantEnum.FieldType.Scale =>
+                condition is ConstantEnum.LogicCondition.Is
+                    or ConstantEnum.LogicCondition.IsNot
+                    or ConstantEnum.LogicCondition.GreaterThan
+                    or ConstantEnum.LogicCondition.LessThan
+                    or ConstantEnum.LogicCondition.GreaterThanOrEqual
+                    or ConstantEnum.LogicCondition.LessThanOrEqual
+                    or ConstantEnum.LogicCondition.Always,
+            ConstantEnum.FieldType.Date or ConstantEnum.FieldType.Time or ConstantEnum.FieldType.DateTime =>
+                condition is ConstantEnum.LogicCondition.Is
+                    or ConstantEnum.LogicCondition.IsNot
+                    or ConstantEnum.LogicCondition.GreaterThan
+                    or ConstantEnum.LogicCondition.LessThan
+                    or ConstantEnum.LogicCondition.Always,
+            ConstantEnum.FieldType.Select or ConstantEnum.FieldType.Radio or ConstantEnum.FieldType.YesNo =>
+                condition is ConstantEnum.LogicCondition.Is
+                    or ConstantEnum.LogicCondition.IsNot
+                    or ConstantEnum.LogicCondition.Always,
+            ConstantEnum.FieldType.MultiSelect =>
+                condition is ConstantEnum.LogicCondition.Contains
+                    or ConstantEnum.LogicCondition.DoesNotContain
+                    or ConstantEnum.LogicCondition.Always,
+            _ =>
+                condition is ConstantEnum.LogicCondition.Is
+                    or ConstantEnum.LogicCondition.IsNot
+                    or ConstantEnum.LogicCondition.Contains
+                    or ConstantEnum.LogicCondition.DoesNotContain
+                    or ConstantEnum.LogicCondition.Always
         };
+    }
+
+    /// <summary>
+    /// Evaluate logic condition based on field type and values
+    /// </summary>
+    private static bool EvaluateLogicCondition(
+        ConstantEnum.FieldType fieldType,
+        ConstantEnum.LogicCondition condition,
+        IReadOnlyList<string> currentValues,
+        string? logicValue)
+    {
+        if (!IsLogicConditionAllowed(fieldType, condition))
+        {
+            return false;
+        }
+
+        if (condition == ConstantEnum.LogicCondition.Always)
+        {
+            return true;
+        }
+
+        if (currentValues.Count == 0)
+        {
+            return false;
+        }
+
+        var normalizedLogicValue = NormalizeValue(logicValue ?? string.Empty);
+        if (string.IsNullOrWhiteSpace(normalizedLogicValue))
+        {
+            return false;
+        }
+
+        switch (fieldType)
+        {
+            case ConstantEnum.FieldType.Number:
+            case ConstantEnum.FieldType.Rating:
+            case ConstantEnum.FieldType.Scale:
+                if (!TryParseDouble(normalizedLogicValue, out var logicNumber))
+                {
+                    return false;
+                }
+
+                var currentNumber = GetFirstNumber(currentValues);
+                if (!currentNumber.HasValue)
+                {
+                    return false;
+                }
+
+                return condition switch
+                {
+                    ConstantEnum.LogicCondition.Is => currentNumber.Value == logicNumber,
+                    ConstantEnum.LogicCondition.IsNot => currentNumber.Value != logicNumber,
+                    ConstantEnum.LogicCondition.GreaterThan => currentNumber.Value > logicNumber,
+                    ConstantEnum.LogicCondition.LessThan => currentNumber.Value < logicNumber,
+                    ConstantEnum.LogicCondition.GreaterThanOrEqual => currentNumber.Value >= logicNumber,
+                    ConstantEnum.LogicCondition.LessThanOrEqual => currentNumber.Value <= logicNumber,
+                    _ => false
+                };
+            case ConstantEnum.FieldType.Date:
+            case ConstantEnum.FieldType.DateTime:
+                if (!TryParseDateTime(normalizedLogicValue, out var logicDateTime))
+                {
+                    return false;
+                }
+
+                var currentDateTime = GetFirstDateTime(currentValues);
+                if (!currentDateTime.HasValue)
+                {
+                    return false;
+                }
+
+                if (fieldType == ConstantEnum.FieldType.Date)
+                {
+                    logicDateTime = logicDateTime.Date;
+                    currentDateTime = currentDateTime.Value.Date;
+                }
+
+                return condition switch
+                {
+                    ConstantEnum.LogicCondition.Is => currentDateTime.Value == logicDateTime,
+                    ConstantEnum.LogicCondition.IsNot => currentDateTime.Value != logicDateTime,
+                    ConstantEnum.LogicCondition.GreaterThan => currentDateTime.Value > logicDateTime,
+                    ConstantEnum.LogicCondition.LessThan => currentDateTime.Value < logicDateTime,
+                    _ => false
+                };
+            case ConstantEnum.FieldType.Time:
+                if (!TryParseTime(normalizedLogicValue, out var logicTime))
+                {
+                    return false;
+                }
+
+                var currentTime = GetFirstTime(currentValues);
+                if (!currentTime.HasValue)
+                {
+                    return false;
+                }
+
+                return condition switch
+                {
+                    ConstantEnum.LogicCondition.Is => currentTime.Value == logicTime,
+                    ConstantEnum.LogicCondition.IsNot => currentTime.Value != logicTime,
+                    ConstantEnum.LogicCondition.GreaterThan => currentTime.Value > logicTime,
+                    ConstantEnum.LogicCondition.LessThan => currentTime.Value < logicTime,
+                    _ => false
+                };
+            case ConstantEnum.FieldType.MultiSelect:
+                return condition switch
+                {
+                    ConstantEnum.LogicCondition.Contains => currentValues.Any(v => string.Equals(v, normalizedLogicValue, StringComparison.OrdinalIgnoreCase)),
+                    ConstantEnum.LogicCondition.DoesNotContain => currentValues.All(v => !string.Equals(v, normalizedLogicValue, StringComparison.OrdinalIgnoreCase)),
+                    _ => false
+                };
+            case ConstantEnum.FieldType.Select:
+            case ConstantEnum.FieldType.Radio:
+            case ConstantEnum.FieldType.YesNo:
+                return condition switch
+                {
+                    ConstantEnum.LogicCondition.Is => currentValues.Any(v => string.Equals(v, normalizedLogicValue, StringComparison.OrdinalIgnoreCase)),
+                    ConstantEnum.LogicCondition.IsNot => currentValues.All(v => !string.Equals(v, normalizedLogicValue, StringComparison.OrdinalIgnoreCase)),
+                    _ => false
+                };
+            default:
+                return condition switch
+                {
+                    ConstantEnum.LogicCondition.Is => currentValues.Any(v => string.Equals(v, normalizedLogicValue, StringComparison.OrdinalIgnoreCase)),
+                    ConstantEnum.LogicCondition.IsNot => currentValues.All(v => !string.Equals(v, normalizedLogicValue, StringComparison.OrdinalIgnoreCase)),
+                    ConstantEnum.LogicCondition.Contains => currentValues.Any(v => v.IndexOf(normalizedLogicValue, StringComparison.OrdinalIgnoreCase) >= 0),
+                    ConstantEnum.LogicCondition.DoesNotContain => currentValues.All(v => v.IndexOf(normalizedLogicValue, StringComparison.OrdinalIgnoreCase) < 0),
+                    _ => false
+                };
+        }
+    }
+
+    private static double? GetFirstNumber(IReadOnlyList<string> values)
+    {
+        foreach (var value in values)
+        {
+            if (TryParseDouble(value, out var number))
+            {
+                return number;
+            }
+        }
+
+        return null;
+    }
+
+    private static DateTime? GetFirstDateTime(IReadOnlyList<string> values)
+    {
+        foreach (var value in values)
+        {
+            if (TryParseDateTime(value, out var dateTime))
+            {
+                return dateTime;
+            }
+        }
+
+        return null;
+    }
+
+    private static TimeSpan? GetFirstTime(IReadOnlyList<string> values)
+    {
+        foreach (var value in values)
+        {
+            if (TryParseTime(value, out var time))
+            {
+                return time;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool TryParseDouble(string? input, out double value)
+    {
+        if (string.IsNullOrWhiteSpace(input))
+        {
+            value = 0;
+            return false;
+        }
+
+        return double.TryParse(input, NumberStyles.Float, CultureInfo.InvariantCulture, out value)
+            || double.TryParse(input, NumberStyles.Float, CultureInfo.CurrentCulture, out value);
+    }
+
+    private static bool TryParseDateTime(string? input, out DateTime value)
+    {
+        if (string.IsNullOrWhiteSpace(input))
+        {
+            value = default;
+            return false;
+        }
+
+        return DateTime.TryParse(input, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out value)
+            || DateTime.TryParse(input, CultureInfo.CurrentCulture, DateTimeStyles.RoundtripKind, out value);
+    }
+
+    private static bool TryParseTime(string? input, out TimeSpan value)
+    {
+        if (string.IsNullOrWhiteSpace(input))
+        {
+            value = default;
+            return false;
+        }
+
+        return TimeSpan.TryParse(input, CultureInfo.InvariantCulture, out value)
+            || TimeSpan.TryParse(input, CultureInfo.CurrentCulture, out value);
     }
 
     /// <summary>

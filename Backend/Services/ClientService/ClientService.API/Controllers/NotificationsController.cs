@@ -1,6 +1,7 @@
 using System.Text.Json;
 using BaseService.Application.Interfaces.IdentityHepers;
 using ClientService.Application.Interfaces.NotificationServices;
+using ClientService.Application.Notifications.Commands.ReadNotifications;
 using ClientService.Application.Notifications.Queries.GetNotifications;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -79,5 +80,20 @@ public class NotificationsController : ControllerBase
     {
         var request = new GetNotificationsQuery();
         return await _notificationService.GetNotificationsAsync(request, cancellationToken);
+    }
+
+    /// <summary>
+    /// Mark notifications as read
+    /// </summary>
+    [HttpPost("[action]")]
+    [Authorize(AuthenticationSchemes = OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme)]
+    public async Task<ReadNotificationsCommandResponse> ReadNotifications([FromBody] List<Guid> notificationIds, CancellationToken cancellationToken)
+    {
+        var request = new ReadNotificationsCommand
+        {
+            NotificationIds = notificationIds ?? new List<Guid>()
+        };
+
+        return await _notificationService.ReadNotificationsAsync(request, cancellationToken);
     }
 }
